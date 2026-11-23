@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>In de voetsporen van Jean de La Fontaine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- ===================== ONBOARDING ===================== -->
+  <section id="screen-onboarding" class="screen active">
+    <div class="onboarding-scene">
+      <div class="parchment onboarding-card">
+        <div class="wax-seal">JLF</div>
+        <h1 class="title-script">In de voetsporen van<br /><span>Jean de La Fontaine</span></h1>
+        <p class="subtitle">Een leerreis door het 17e-eeuwse Frankrijk — Frans · Havo 3</p>
+
+        <div class="jean-intro">
+          <div class="jean-avatar" aria-hidden="true"><img src="img/jean_portrait.jpg" alt="Jean de La Fontaine" /></div>
+          <div class="speech">
+            <p><em>« Bonjour, jonge schrijver! Ik ben <strong>Jean de La Fontaine</strong>. Ik zoek een leerling met een scherpe geest en een liefde voor verhalen. Vertel mij eerst wie je bent... »</em></p>
+          </div>
+        </div>
+
+        <label class="field-label" for="student-name">Hoe heet je?</label>
+        <input id="student-name" class="text-input" type="text" maxlength="24" placeholder="Jouw naam of schrijversnaam..." autocomplete="off" />
+
+        <p class="field-label">Kies je portret (of upload je eigen plaatje):</p>
+        <div id="avatar-grid" class="avatar-grid"></div>
+
+        <div class="upload-avatar">
+          <label for="avatar-upload" class="btn btn-ghost small">📷 Eigen foto uploaden</label>
+          <input id="avatar-upload" type="file" accept="image/*" hidden />
+          <span id="avatar-upload-name" class="upload-hint"></span>
+        </div>
+
+        <button id="start-journey" class="btn btn-gold big" disabled>Begin de reis ✒️</button>
+        <p id="onboarding-error" class="form-error" role="alert"></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== APP SHELL ===================== -->
+  <div id="app-shell" class="app-shell hidden">
+    <header class="topbar">
+      <div class="brand" data-nav="map">
+        <span class="brand-mark">🪶</span>
+        <span class="brand-text">La Fontaine</span>
+      </div>
+      <nav class="topnav">
+        <button class="nav-btn" data-nav="intro">ℹ️ Intro</button>
+        <button class="nav-btn" data-nav="map">🗺️ Leerreis</button>
+        <button class="nav-btn" data-nav="fables">📚 Fabels</button>
+        <button class="nav-btn" data-nav="atelier">✒️ Atelier</button>
+        <button class="nav-btn" data-nav="videotheque">🎬 Vidéothèque</button>
+        <button class="nav-btn" data-nav="dashboard">📊 Dashboard</button>
+        <button class="nav-btn" data-nav="leaderboard">🏆 Ranglijst</button>
+        <button class="nav-btn" data-nav="klastips">💬 Klastips</button>
+      </nav>
+      <div class="player-chip" data-nav="dashboard" title="Jouw profiel">
+        <span id="chip-streak" class="chip-streak hidden" title="Aantal keer meteen goed op rij">🔥 0</span>
+        <span id="chip-feathers" class="chip-feathers">🪶 0</span>
+        <span id="chip-avatar" class="chip-avatar">🙂</span>
+        <span id="chip-name" class="chip-name">Leerling</span>
+      </div>
+    </header>
+
+    <div id="global-progress" class="global-progress">
+      <div class="global-progress-fill" id="global-progress-fill"></div>
+      <span class="global-progress-label" id="global-progress-label">0%</span>
+    </div>
+
+    <main id="view" class="view"><!-- screens injected here --></main>
+
+    <footer class="app-footer">
+      <span>« Je me sers d'animaux pour instruire les hommes. » — Jean de La Fontaine</span>
+    </footer>
+  </div>
+
+  <!-- ===================== MODAL / TOAST ===================== -->
+  <div id="modal-root" class="modal-root hidden">
+    <div class="modal-backdrop" data-close-modal></div>
+    <div class="modal-card parchment" role="dialog" aria-modal="true">
+      <div id="modal-body"></div>
+      <button class="btn btn-gold" data-close-modal>Verder</button>
+    </div>
+  </div>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <!-- ===================== TOEGANKELIJKHEID ===================== -->
+  <button id="a11y-launcher" class="a11y-launcher" title="Lees- &amp; voorleeshulp" aria-label="Lees- en voorleeshulp">👓</button>
+  <div id="a11y-panel" class="a11y-panel hidden"></div>
+
+  <!-- ===================== BANQUE DE MOTS (zwevende taalhulp) ===================== -->
+  <button id="banque-launcher" class="banque-launcher hidden" title="Franse woorden & zinnen">📖 Banque</button>
+  <div id="banque-root" class="banque-root hidden">
+    <div class="banque-backdrop" data-close-banque></div>
+    <aside class="banque-panel">
+      <div class="banque-head">
+        <h3>📖 Banque de mots &amp; de phrases</h3>
+        <button class="banque-close" data-close-banque aria-label="Sluiten">✕</button>
+      </div>
+      <input id="banque-search" class="banque-search" type="text" placeholder="Zoek een woord (Frans of Nederlands)..." autocomplete="off" />
+      <div id="banque-tabs" class="banque-tabs"></div>
+      <div id="banque-body" class="banque-body"></div>
+    </aside>
+  </div>
+
+  <!-- Firebase (compat — geen build-stap nodig) -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase.js"></script>
+
+  <script src="js/data.js"></script>
+  <script src="js/data-fr.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
