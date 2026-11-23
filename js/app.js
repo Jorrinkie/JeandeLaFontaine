@@ -6,7 +6,7 @@
   "use strict";
 
   /* ---------------- storage ---------------- */
-  const LS = { profile: "flf_profile", progress: "flf_progress", board: "flf_leaderboard", teacher: "flf_teacher_device", videos: "flf_videos", docs: "flf_docs", feedback: "flf_feedback" };
+  const LS = { profile: "flf_profile", progress: "flf_progress", board: "flf_leaderboard", teacher: "flf_teacher_device", videos: "flf_videos", docs: "flf_docs", feedback: "flf_feedback", classCode: "flf_class_code" };
 
   let pendingFeedbackCh = null; // check-in na H2/H4/H6
 
@@ -142,6 +142,7 @@
   })();
 
   let profile = load(LS.profile, null);
+  let classCode = load(LS.classCode, null);
   let progress = load(LS.progress, defaultProgress());
   let board = load(LS.board, null);
   if (!board) { board = seedBoard(); save(LS.board, board); }
@@ -229,7 +230,7 @@
     refreshChrome();
     // sync voortgang naar Firestore (docent-volging)
     if (profile && typeof fbSaveProgress === "function") {
-      fbSaveProgress(profile.name, profile.avatar, progress).catch(function() {});
+      fbSaveProgress(profile.name, profile.avatar, progress, classCode).catch(function() {});
     }
     // badge on chapter completion
     if (chapterDone(ch) && progress.badges.indexOf(ch.badge) === -1) {
@@ -570,7 +571,7 @@
     if (!profile || typeof fbSaveProgress !== "function") return;
     clearTimeout(_fbSyncTimer);
     _fbSyncTimer = setTimeout(function() {
-      fbSaveProgress(profile.name, profile.avatar, progress).catch(function() {});
+      fbSaveProgress(profile.name, profile.avatar, progress, classCode).catch(function() {});
     }, 4000); // 4 seconden na laatste toetsaanslag
   }
 
@@ -605,6 +606,75 @@
     view.append(h("div", { class: "view-head" },
       h("h2", {}, "🛠️ Docentbeheer"),
       h("p", {}, "Pas teksten en instructies aan voor de hele app. Wijzigingen zijn zichtbaar voor alle leerlingen op dit apparaat.")));
+
+    // ── Klassen beheer ─────────────────────────────────────
+    const klassenCard = h("div", { class: "db-card", style: "margin-bottom:28px" });
+    klassenCard.append(h("h2", { style: "color:var(--royal);margin:0 0 14px" }, "🏫 Klassen beheren"));
+
+    // Nieuwe klas aanmaken
+    const nieuweKlasWrap = h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px" });
+    const klasNaamInput = h("input", { type: "text", placeholder: "Klasnaam (bijv. 3HB)", style: "flex:1;min-width:120px;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:.93rem" });
+    const klasCodeInput = h("input", { type: "text", placeholder: "Code (bijv. 3HB-FRANS)", style: "flex:1;min-width:140px;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:.93rem;text-transform:uppercase" });
+    const docentNaamInput = h("input", { type: "text", placeholder: "Jouw naam", style: "flex:1;min-width:120px;padding:9px 12px;border:1px solid #ddd;border-radius:8px;font-size:.93rem" });
+    const maakKlasBtn = h("button", { class: "btn btn-gold" }, "+ Klas aanmaken");
+    const klasFout = h("p", { style: "color:#c0392b;margin:4px 0 0;font-size:.85rem;min-height:18px" }, "");
+    klasCodeInput.addEventListener("input", () => { klasCodeInput.value = klasCodeInput.value.toUpperCase(); });
+    maakKlasBtn.addEventListener("click", async function() {
+      const code = klasCodeInput.value.trim().toUpperCase();
+      const naam = klasNaamInput.value.trim();
+      const docent = docentNaamInput.value.trim();
+      if (!code || code.length < 2) { klasFout.textContent = "Voer een klascode in (min. 2 tekens)."; return; }
+      if (!naam) { klasFout.textContent = "Voer een klasnaam in."; return; }
+      maakKlasBtn.disabled = true;
+      maakKlasBtn.textContent = "Aanmaken…";
+      try {
+        await fbCreateClass(code, docent || "Docent", naam);
+        klasFout.style.color = "green";
+        klasFout.textContent = "✅ Klas \"" + naam + "\" aangemaakt met code: " + code;
+        klasCodeInput.value = "";
+        klasNaamInput.value = "";
+        laadKlassen();
+      } catch(e) {
+        klasFout.style.color = "#c0392b";
+        klasFout.textContent = "Fout bij aanmaken: " + e.message;
+      }
+      maakKlasBtn.disabled = false;
+      maakKlasBtn.textContent = "+ Klas aanmaken";
+    });
+    nieuweKlasWrap.append(docentNaamInput, klasNaamInput, klasCodeInput, maakKlasBtn);
+    klassenCard.append(h("p", { style: "font-size:.88rem;color:var(--ink-soft);margin:0 0 10px" }, "Maak voor elke klas een aparte code aan. Leerlingen voeren deze code in bij het opstarten."));
+    klassenCard.append(nieuweKlasWrap, klasFout);
+
+    // Lijst bestaande klassen
+    const klassenLijst = h("div", { style: "margin-top:16px" });
+    klassenCard.append(klassenLijst);
+
+    async function laadKlassen() {
+      klassenLijst.innerHTML = "<p style='color:var(--ink-soft);font-style:italic;font-size:.9rem'>Klassen laden…</p>";
+      if (typeof fbGetAllClasses !== "function") { klassenLijst.innerHTML = "<p style='color:#c0392b'>Firebase niet beschikbaar.</p>"; return; }
+      const klassen = await fbGetAllClasses();
+      klassenLijst.innerHTML = "";
+      if (!klassen.length) { klassenLijst.innerHTML = "<p style='color:var(--ink-soft);font-size:.9rem'>Nog geen klassen aangemaakt.</p>"; return; }
+      klassen.forEach(function(klas) {
+        const rij = h("div", { style: "display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--parchment,#fdf6e3);border-radius:10px;margin-bottom:8px;flex-wrap:wrap" });
+        rij.append(
+          h("span", { style: "font-weight:700;color:var(--royal)" }, klas.klasNaam || klas.code),
+          h("code", { style: "background:#eee;padding:3px 8px;border-radius:6px;font-size:.9rem;letter-spacing:1px" }, klas.code),
+          h("span", { style: "color:var(--ink-soft);font-size:.85rem" }, klas.docentNaam || "")
+        );
+        const verwijderBtn = h("button", { class: "btn btn-ghost small", style: "margin-left:auto;color:#c0392b;border-color:#c0392b" }, "🗑 Verwijder klas");
+        verwijderBtn.addEventListener("click", async function() {
+          if (!confirm("Verwijder klas \"" + (klas.klasNaam || klas.code) + "\" en alle bijbehorende leerlingdata?")) return;
+          await fbDeleteClass(klas.code);
+          toast("🗑 Klas " + (klas.klasNaam || klas.code) + " verwijderd.");
+          laadKlassen();
+        });
+        rij.append(verwijderBtn);
+        klassenLijst.append(rij);
+      });
+    }
+    laadKlassen();
+    view.append(klassenCard);
 
     function sectie(titel, uitleg, fields) {
       const card = h("div", { class: "activity-card", style: "margin-bottom:20px" });
@@ -706,11 +776,27 @@
     view.append(form);
 
     // ── Leerlingen sectie ─────────────────────────────────
+    let gekozenKlas = null;
     const leerlingenCard = h("div", { class: "db-card", style: "margin-top:28px" });
-    const leerlingenHead = h("div", { style: "display:flex;align-items:center;gap:10px;margin-bottom:14px" },
+    const leerlingenHead = h("div", { style: "display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap" },
       h("h2", { style: "color:var(--royal);margin:0" }, "👥 Leerlingenvoortgang"),
       h("button", { class: "btn btn-ghost small", id: "btn-refresh-leerlingen" }, "🔄 Vernieuwen")
     );
+    // Klas-filter dropdown
+    const klasFilter = h("select", { style: "padding:7px 10px;border:1px solid #ddd;border-radius:8px;font-size:.9rem;margin-left:auto" });
+    klasFilter.append(h("option", { value: "" }, "— Alle klassen —"));
+    if (typeof fbGetAllClasses === "function") {
+      fbGetAllClasses().then(function(klassen) {
+        klassen.forEach(function(k) {
+          klasFilter.append(h("option", { value: k.code }, (k.klasNaam || k.code) + " (" + k.code + ")"));
+        });
+      });
+    }
+    klasFilter.addEventListener("change", function() {
+      gekozenKlas = klasFilter.value || null;
+      laadLeerlingen();
+    });
+    leerlingenHead.append(klasFilter);
     leerlingenCard.append(leerlingenHead);
     const leerlingenBody = h("div", { id: "leerlingen-body" },
       h("p", { style: "color:var(--ink-soft);font-style:italic" }, "Laden…")
@@ -789,7 +875,7 @@
         verwijderBtn.addEventListener("click", function() {
           if (!confirm("Verwijder " + leerling.name + " uit het docent-overzicht?")) return;
           if (typeof fbDeleteProgress === "function") {
-            fbDeleteProgress(leerling.name).then(function() {
+            fbDeleteProgress(leerling.name, leerling.classCode).then(function() {
               toast("🗑 " + leerling.name + " verwijderd.");
               kaart.remove();
             }).catch(function() { toast("Verwijderen mislukt."); });
@@ -817,7 +903,7 @@
         leerlingenBody.innerHTML = "<p style='color:#c0392b'>Firebase niet beschikbaar.</p>";
         return;
       }
-      fbLoadAllProgress().then(function(data) {
+      fbLoadAllProgress(gekozenKlas || null).then(function(data) {
         renderLeerlingenTable(data);
       }).catch(function() {
         leerlingenBody.innerHTML = "<p style='color:#c0392b'>Kon leerlingendata niet laden.</p>";
@@ -858,7 +944,7 @@
       return;
     }
 
-    fbLoadPeertips().then(function(tips) {
+    fbLoadPeertips(classCode).then(function(tips) {
       wrap.innerHTML = "";
       if (!tips || !tips.length) {
         wrap.append(h("p", { class: "peertips-empty" }, "Nog geen tips geplaatst. Wees de eerste!"));
@@ -3619,7 +3705,7 @@
       card.append(tipsWrap);
 
       if (typeof fbLoadPeertips === "function") {
-        fbLoadPeertips().then(function(tips) {
+        fbLoadPeertips(classCode).then(function(tips) {
           if (!tips || !tips.length) {
             tipsWrap.innerHTML = "<p class='peertips-empty'>Nog geen tips van klasgenoten.</p>";
             return;
@@ -3657,7 +3743,7 @@
       // Opslaan in Firestore zodat klasgenoten de tip ook zien
       if (typeof fbSavePeertip === "function") {
         const studentName = (profile && profile.name) ? profile.name : "Anoniem";
-        fbSavePeertip(studentName, tipText).catch(function(e) {
+        fbSavePeertip(studentName, tipText, classCode).catch(function(e) {
           console.warn("Peertip opslaan in Firestore mislukt:", e);
         });
       }
@@ -3914,7 +4000,85 @@
     }
   }
 
-  if (profile) {
+  /* ── Klascode scherm ──────────────────────────────────── */
+  function initKlascodeScherm() {
+    // Verwijder bestaand scherm als het er al is
+    const bestaand = document.getElementById("screen-klascode");
+    if (bestaand) bestaand.remove();
+
+    const scherm = document.createElement("div");
+    scherm.id = "screen-klascode";
+    scherm.style.cssText = "position:fixed;inset:0;background:var(--parchment,#fdf6e3);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px";
+
+    scherm.innerHTML = `
+      <div style="background:#fff;border-radius:16px;padding:36px 32px;max-width:420px;width:100%;box-shadow:0 8px 32px rgba(0,0,0,.12);text-align:center">
+        <div style="font-size:2.8rem;margin-bottom:8px">🦊</div>
+        <h2 style="margin:0 0 6px;color:var(--royal,#2c3e7a)">In de voetsporen van La Fontaine</h2>
+        <p style="color:#666;margin:0 0 24px;font-size:.95rem">Voer de klascode in die je docent heeft gegeven</p>
+        <input id="kc-input" type="text" placeholder="Klascode (bijv. 3HB-FRANS)"
+          style="width:100%;box-sizing:border-box;padding:12px 16px;font-size:1.1rem;border:2px solid #ddd;border-radius:10px;text-transform:uppercase;letter-spacing:2px;text-align:center;margin-bottom:12px">
+        <p id="kc-fout" style="color:#c0392b;min-height:20px;margin:0 0 12px;font-size:.9rem"></p>
+        <button id="kc-btn" style="width:100%;padding:13px;background:var(--royal,#2c3e7a);color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer">
+          Verder →
+        </button>
+      </div>`;
+
+    document.body.prepend(scherm);
+
+    const input = scherm.querySelector("#kc-input");
+    const btn   = scherm.querySelector("#kc-btn");
+    const fout  = scherm.querySelector("#kc-fout");
+
+    input.addEventListener("input", () => {
+      input.value = input.value.toUpperCase();
+      fout.textContent = "";
+    });
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
+
+    btn.addEventListener("click", async () => {
+      const code = input.value.trim().toUpperCase();
+      if (code.length < 2) { fout.textContent = "Voer een geldige klascode in."; return; }
+      btn.disabled = true;
+      btn.textContent = "Controleren…";
+      fout.textContent = "";
+
+      let geldig = false;
+      if (typeof fbValidateClass === "function") {
+        const klas = await fbValidateClass(code);
+        geldig = !!klas;
+      } else {
+        // Firebase niet beschikbaar: accepteer elke code (offline modus)
+        geldig = true;
+      }
+
+      if (geldig) {
+        classCode = code;
+        save(LS.classCode, classCode);
+        scherm.remove();
+        // Na klascode: ga naar naam-invoer als nog geen profiel
+        if (!profile) {
+          initOnboarding();
+        } else {
+          $("#screen-onboarding").classList.remove("active");
+          $("#app-shell").classList.remove("hidden");
+          showBanqueLauncher();
+          syncBoard();
+          refreshChrome();
+          updateAankondiging();
+          refreshDocentNav();
+          go("intro");
+        }
+      } else {
+        fout.textContent = "❌ Klascode niet gevonden. Vraag je docent om de juiste code.";
+        btn.disabled = false;
+        btn.textContent = "Verder →";
+      }
+    });
+
+    input.focus();
+  }
+
+  if (profile && classCode) {
     $("#screen-onboarding").classList.remove("active");
     $("#app-shell").classList.remove("hidden");
     showBanqueLauncher();
@@ -3923,6 +4087,8 @@
     updateAankondiging();
     refreshDocentNav();
     go("intro");
+  } else if (!classCode && !isTeacher()) {
+    initKlascodeScherm();
   } else {
     initOnboarding();
   }
