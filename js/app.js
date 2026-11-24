@@ -150,6 +150,12 @@
 
   let profile = load(LS.profile, null);
   let classCode = load(LS.classCode, null);
+  // Elke leerling krijgt een unieke id (per apparaat), los van de naam
+  function makeUid() {
+    try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID().replace(/-/g, "").slice(0, 16); } catch (e) {}
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+  }
+  if (profile && !profile.uid) { profile.uid = makeUid(); save(LS.profile, profile); }
   let progress = load(LS.progress, defaultProgress());
   let board = load(LS.board, null);
   if (!board) { board = seedBoard(); save(LS.board, board); }
@@ -237,9 +243,7 @@
     syncBoard();
     refreshChrome();
     // sync voortgang naar Firestore (docent-volging)
-    if (profile && typeof fbSaveProgress === "function") {
-      fbSaveProgress(profile.name, profile.avatar, progress, classCode).catch(function() {});
-    }
+    pushProgress();
     // badge on chapter completion
     if (chapterDone(ch) && progress.badges.indexOf(ch.badge) === -1) {
       progress.badges.push(ch.badge);
@@ -384,11 +388,33 @@
       validate();
     }
 
-    startBtn.addEventListener("click", () => {
+    startBtn.addEventListener("click", async () => {
       const name = nameInput.value.trim();
-      if (name.length < 2 || !chosen) { $("#onboarding-error").textContent = "Vul een naam in en kies een plaatje."; return; }
-      profile = { name, avatar: chosen };
+      const errEl = $("#onboarding-error");
+      if (name.length < 2 || !chosen) { errEl.textContent = "Vul een naam in en kies een plaatje."; return; }
+      const uid = (profile && profile.uid) || makeUid();
+      const naamGewijzigd = !profile || profile.name.trim().toLowerCase() !== name.toLowerCase();
+      // Naam al bezet in deze klas door een andere leerling? Dan een andere naam laten kiezen.
+      if (naamGewijzigd && classCode && typeof fbNameTaken === "function") {
+        const oudeTekst = startBtn.textContent;
+        startBtn.disabled = true; startBtn.textContent = "Even controleren…";
+        const bezet = await fbNameTaken(classCode, name, uid);
+        startBtn.textContent = oudeTekst; validate();
+        if (bezet) {
+          errEl.textContent = "Er zit al iemand met de naam \"" + name + "\" in deze klas. Zet de eerste letter van je achternaam erachter, bijvoorbeeld \"" + name + " B.\"";
+          nameInput.focus();
+          return;
+        }
+      }
+      errEl.textContent = "";
+      profile = { name, avatar: chosen, uid };
       save(LS.profile, profile);
+      // Meteen opslaan, zodat de naam direct "bezet" is voor klasgenoten
+      if (classCode && typeof fbSaveProgress === "function") {
+        // nieuwe leerling: een eerdere klas-reset geldt niet voor hem
+        if (!progress.scoreResetSeen) { progress.scoreResetSeen = Date.now(); save(LS.progress, progress); }
+        fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid).catch(function() {});
+      }
       syncBoard();
       $("#screen-onboarding").classList.remove("active");
       $("#app-shell").classList.remove("hidden");
@@ -573,14 +599,38 @@
   const LS_VOCAB = "flf_vocab_overrides";
   const LS_CHIPS = "flf_intro_chips";
 
+  // Heeft de docent de scores van deze klas gereset? Dan lokale veren ook op 0 (max. 1x per minuut gecontroleerd).
+  let _resetCheckAt = 0, _resetCheckBusy = null;
+  function checkScoreReset(force) {
+    if (!profile || !classCode || typeof fbValidateClass !== "function") return Promise.resolve();
+    if (_resetCheckBusy) return _resetCheckBusy;
+    if (!force && Date.now() - _resetCheckAt < 60000) return Promise.resolve();
+    _resetCheckBusy = fbValidateClass(classCode).then(function (klas) {
+      _resetCheckAt = Date.now();
+      const t = klas && klas.scoreReset;
+      if (t && t > (progress.scoreResetSeen || 0)) {
+        progress.feathers = 0;
+        progress.scoreResetSeen = t;
+        save(LS.progress, progress);
+        syncBoard(); refreshChrome();
+        toast("🏆 Je docent heeft de ranglijst gereset — iedereen begint weer bij 0 veren!");
+      }
+    }).catch(function () {}).then(function () { _resetCheckBusy = null; });
+    return _resetCheckBusy;
+  }
+  function pushProgress() {
+    if (!profile || !classCode || typeof fbSaveProgress !== "function") return;
+    checkScoreReset().then(function () {
+      fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid).catch(function() {});
+    });
+  }
+
   // Debounced Firebase sync — zodat atelier-typing niet elke toetsaanslag synct
   let _fbSyncTimer = null;
   function scheduleFbSync() {
     if (!profile || typeof fbSaveProgress !== "function") return;
     clearTimeout(_fbSyncTimer);
-    _fbSyncTimer = setTimeout(function() {
-      fbSaveProgress(profile.name, profile.avatar, progress, classCode).catch(function() {});
-    }, 4000); // 4 seconden na laatste toetsaanslag
+    _fbSyncTimer = setTimeout(pushProgress, 4000); // 4 seconden na laatste toetsaanslag
   }
 
   function vocabGet(fabelId) {
@@ -863,7 +913,7 @@
         verwijderBtn.addEventListener("click", function() {
           if (!confirm("Verwijder " + leerling.name + " uit het docent-overzicht?")) return;
           if (typeof fbDeleteProgress === "function") {
-            fbDeleteProgress(leerling.name, leerling.classCode).then(function() {
+            fbDeleteProgress(leerling.name, leerling.classCode, leerling._id).then(function() {
               toast("🗑 " + leerling.name + " verwijderd.");
               kaart.remove();
             }).catch(function() { toast("Verwijderen mislukt."); });
@@ -2528,28 +2578,48 @@
         const av = h("span", { class: "board-avatar" }); avatarInto(av, r.avatar || "🙂");
         const rankCls = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "";
         const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
-        const isMe = profile && r.name === profile.name;
+        const isMe = profile && (r.uid ? r.uid === profile.uid : r.name === profile.name);
         tb.append(h("tr", { class: "board-row" + (isMe ? " me" : "") },
           h("td", {}, h("span", { class: "rank-badge " + rankCls }, medal)),
           h("td", {}, av, r.name + (isMe ? " (jij)" : "")),
           h("td", {}, "🪶 " + (r.feathers || 0)),
-          h("td", {}, "🎖️ " + (r.badges || (Array.isArray(r.badges) ? r.badges.length : 0)))));
+          h("td", {}, "🎖️ " + (Array.isArray(r.badges) ? r.badges.length : (r.badges || 0)))));
       });
       table.append(tb);
       card.append(table);
     }
 
-    // Probeer Firebase-ranglijst (per klas) te laden
-    if (classCode && typeof fbLoadAllProgress === "function") {
+    let boardKlas = null;
+    function laadKlas(code) {
+      boardKlas = code;
+      card.innerHTML = "";
       card.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.9rem" }, "Ranglijst laden…"));
-      fbLoadAllProgress(classCode).then(function(data) {
-        const spelers = data.sort(function(a, b) { return (b.feathers || 0) - (a.feathers || 0); });
-        toonRanglijst(spelers);
+      fbLoadAllProgress(code).then(function(data) {
+        toonRanglijst(data.sort(function(a, b) { return (b.feathers || 0) - (a.feathers || 0); }));
       }).catch(function() {
-        // Fallback: lokale ranglijst
-        const sorted = [...board].sort((a, b) => (b.feathers - a.feathers) || (b.badges - a.badges));
-        toonRanglijst(sorted);
+        card.innerHTML = "";
+        card.append(h("div", { class: "board-empty" }, "Kon de ranglijst niet laden. Probeer het later opnieuw."));
       });
+    }
+
+    if (isTeacher() && typeof fbGetAllClasses === "function" && typeof fbLoadAllProgress === "function") {
+      // Docent: kies zelf welke klas je ziet (laatste keuze wordt onthouden op dit apparaat)
+      const kiezer = h("select", { style: "padding:7px 10px;border:1px solid #ddd;border-radius:8px;font-size:.95rem" });
+      const balk = h("div", { style: "display:flex;align-items:center;gap:10px;margin:0 0 12px;flex-wrap:wrap" },
+        h("label", { style: "font-weight:600;color:var(--gold)" }, "Klas:"), kiezer);
+      view.insertBefore(balk, card);
+      card.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.9rem" }, "Klassen laden…"));
+      fbGetAllClasses().then(function(klassen) {
+        if (!klassen.length) { card.innerHTML = ""; card.append(h("div", { class: "board-empty" }, "Nog geen klassen aangemaakt.")); return; }
+        klassen.forEach(function(k) { kiezer.append(h("option", { value: k.code }, (k.klasNaam || k.code) + " (" + k.code + ")")); });
+        const vorige = load("flf_board_klas", null);
+        kiezer.value = klassen.some(function(k) { return k.code === vorige; }) ? vorige : klassen[0].code;
+        laadKlas(kiezer.value);
+      });
+      kiezer.addEventListener("change", function() { save("flf_board_klas", kiezer.value); laadKlas(kiezer.value); });
+    } else if (classCode && typeof fbLoadAllProgress === "function") {
+      // Leerling: ranglijst van de eigen klas
+      checkScoreReset(true).then(function () { laadKlas(classCode); });
     } else {
       // Geen klascode: lokale ranglijst
       const sorted = [...board].sort((a, b) => (b.feathers - a.feathers) || (b.badges - a.badges));
@@ -2560,7 +2630,7 @@
     if (isTeacher()) {
       view.append(h("div", { class: "teacher-zone" },
         h("span", { class: "teacher-badge" }, "🔓 Docentmodus actief op dit apparaat"),
-        h("button", { class: "btn teacher-reset", onClick: resetLeaderboard }, "🗑️ Ranglijst van de klas resetten"),
+        h("button", { class: "btn teacher-reset", onClick: function () { resetLeaderboard(boardKlas, laadKlas); } }, "🗑️ Ranglijst van deze klas resetten"),
         h("button", { class: "teacher-link", onClick: () => {
           if (confirm("Docentmodus op dit apparaat uitschakelen? Je kunt de ranglijst dan niet meer resetten tot je de code opnieuw invoert.")) {
             localStorage.removeItem(LS.teacher); toast("Docentmodus uitgeschakeld."); go("leaderboard");
@@ -2572,8 +2642,16 @@
     }
   }
 
-  function resetLeaderboard() {
+  function resetLeaderboard(klas, herlaad) {
     if (!isTeacher()) { toast("Alleen een gemachtigd docent-apparaat kan dit."); return; }
+    if (klas && typeof fbResetClassScores === "function") {
+      if (!confirm("Ranglijst van klas " + klas + " resetten?\n\nDe veren van ALLE leerlingen in deze klas worden op 0 gezet. Dit kun je niet ongedaan maken.\nVoortgang, antwoorden en badges blijven bewaard.")) return;
+      fbResetClassScores(klas).then(function (n) {
+        toast("🏆 Ranglijst van " + klas + " gereset (" + n + " leerling" + (n === 1 ? "" : "en") + ").");
+        if (herlaad) herlaad(klas);
+      }).catch(function () { toast("❌ Resetten mislukt. Controleer je internetverbinding."); });
+      return;
+    }
     if (!confirm("Weet je zeker dat je de ranglijst van de klas wilt resetten? Alle behaalde scores op dit apparaat worden gewist.")) return;
     board = seedBoard();
     save(LS.board, board);
@@ -4291,6 +4369,7 @@
     refreshChrome();
     updateAankondiging();
     go("intro");
+    checkScoreReset(true);
   } else if (!classCode) {
     initKlascodeScherm();
   } else {

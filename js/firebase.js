@@ -4,13 +4,13 @@
    ========================================================= */
 
 const _firebaseConfig = {
-  apiKey: "AIzaSyBWe00mZ2vLNi3WU_bW8L3C1r47R9PI5Xk",
+  apiKey: "AIzaSyDEwC2uvxuPBrcmLsJD1-cAt1NXjIxEc30",
   authDomain: "jeandelafontaine-9c006.firebaseapp.com",
   projectId: "jeandelafontaine-9c006",
   storageBucket: "jeandelafontaine-9c006.firebasestorage.app",
-  messagingSenderId: "15976543464",
-  appId: "1:15976543464:web:5b5a1607bbbb86ab7bc55d",
-  measurementId: "G-PNQZSM0NP7"
+  messagingSenderId: "402889341991",
+  appId: "1:402889341991:web:e091a903074b390db2e202",
+  measurementId: "G-ZMQF3CP8ZF"
 };
 
 // Initialiseer Firebase (compat-versie, geen build-stap nodig)
@@ -49,6 +49,24 @@ async function fbCreateClass(code, docentNaam, klasNaam) {
     created: Date.now()
   };
   await _schrijfKlassenDoc(klassen);
+}
+
+/**
+ * Docent: zet de veren van alle leerlingen in een klas op 0.
+ * Er wordt ook een reset-tijdstip bij de klas opgeslagen; leerling-apparaten zien dat
+ * en zetten hun eigen (lokale) veren dan ook op 0, zodat de oude score niet terugkomt.
+ * Voortgang, antwoorden en badges blijven bewaard.
+ */
+async function fbResetClassScores(code) {
+  const klassen = await _leesKlassenDoc();
+  if (!klassen[code]) throw new Error("Klas niet gevonden");
+  klassen[code].scoreReset = Date.now();
+  await _schrijfKlassenDoc(klassen);
+  const snap = await _db.collection("leerling_voortgang").where("classCode", "==", code).get();
+  const batch = _db.batch();
+  snap.docs.forEach(d => batch.update(d.ref, { feathers: 0 }));
+  if (snap.docs.length) await batch.commit();
+  return snap.docs.length;
 }
 
 async function fbValidateClass(code) {
@@ -111,6 +129,10 @@ async function fbSavePeertip(studentName, tipText, classCode) {
   });
 }
 
+/* Sorteren gebeurt in de browser i.p.v. met orderBy in Firestore: een where + orderBy
+   vraagt een samengestelde index, en zonder die index gaf de query niets terug. */
+function _tsMillis(t) { return t && typeof t.toMillis === "function" ? t.toMillis() : (typeof t === "number" ? t : 0); }
+
 /**
  * Laad peertips gefilterd op klas (nieuwste eerst, max 50).
  * @param {string} classCode
@@ -118,13 +140,12 @@ async function fbSavePeertip(studentName, tipText, classCode) {
  */
 async function fbLoadPeertips(classCode) {
   try {
-    let query = _db.collection("peertips").orderBy("timestamp", "desc").limit(50);
-    if (classCode) query = _db.collection("peertips")
-      .where("classCode", "==", classCode)
-      .orderBy("timestamp", "desc")
-      .limit(50);
+    let query = _db.collection("peertips");
+    if (classCode) query = query.where("classCode", "==", classCode);
     const snap = await query.get();
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => _tsMillis(b.timestamp) - _tsMillis(a.timestamp))
+      .slice(0, 50);
   } catch (e) {
     console.warn("fbLoadPeertips fout:", e);
     return [];
@@ -164,17 +185,13 @@ async function fbSaveScore(studentName, feathers, classCode) {
  */
 async function fbLoadLeaderboard(classCode) {
   try {
-    let query;
-    if (classCode) {
-      query = _db.collection("leaderboard")
-        .where("classCode", "==", classCode)
-        .orderBy("feathers", "desc")
-        .limit(20);
-    } else {
-      query = _db.collection("leaderboard").orderBy("feathers", "desc").limit(20);
-    }
+    let query = _db.collection("leaderboard");
+    if (classCode) query = query.where("classCode", "==", classCode);
     const snap = await query.get();
-    return snap.docs.map(d => d.data());
+    return snap.docs.map(d => d.data())
+      .filter(d => typeof d.feathers === "number")
+      .sort((a, b) => b.feathers - a.feathers)
+      .slice(0, 20);
   } catch (e) {
     console.warn("fbLoadLeaderboard fout:", e);
     return [];
@@ -190,7 +207,7 @@ async function fbLoadLeaderboard(classCode) {
  * @param {object} progress
  * @param {string} classCode
  */
-async function fbSaveProgress(studentName, avatarStr, progress, classCode) {
+async function fbSaveProgress(studentName, avatarStr, progress, classCode, uid) {
   try {
     const safeAnswers = {};
     Object.keys(progress.answers || {}).forEach(function(k) {
@@ -202,9 +219,12 @@ async function fbSaveProgress(studentName, avatarStr, progress, classCode) {
       }
       // data-URL's (video/foto) laten we weg — te groot voor Firestore
     });
-    const docKey = classCode ? classCode + "__" + studentName : studentName;
+    // Uniek per leerling-apparaat (uid), zodat twee leerlingen met dezelfde naam elkaar niet overschrijven
+    const id = uid || studentName;
+    const docKey = classCode ? classCode + "__" + id : id;
     await _db.collection("leerling_voortgang").doc(docKey).set({
       name: studentName,
+      uid: uid || null,
       classCode: classCode || "algemeen",
       avatar: (avatarStr && avatarStr.startsWith("data:")) ? "📷" : (avatarStr || "🙂"),
       feathers: progress.feathers || 0,
@@ -223,16 +243,11 @@ async function fbSaveProgress(studentName, avatarStr, progress, classCode) {
  */
 async function fbLoadAllProgress(classCode) {
   try {
-    let query;
-    if (classCode) {
-      query = _db.collection("leerling_voortgang")
-        .where("classCode", "==", classCode)
-        .orderBy("feathers", "desc");
-    } else {
-      query = _db.collection("leerling_voortgang").orderBy("feathers", "desc");
-    }
+    let query = _db.collection("leerling_voortgang");
+    if (classCode) query = query.where("classCode", "==", classCode);
     const snap = await query.get();
-    return snap.docs.map(d => d.data());
+    return snap.docs.map(d => Object.assign({ _id: d.id }, d.data()))
+      .sort((a, b) => (b.feathers || 0) - (a.feathers || 0));
   } catch (e) {
     console.warn("fbLoadAllProgress fout:", e);
     return [];
@@ -244,10 +259,32 @@ async function fbLoadAllProgress(classCode) {
  * @param {string} studentName
  * @param {string} classCode
  */
-async function fbDeleteProgress(studentName, classCode) {
+async function fbDeleteProgress(studentName, classCode, docId) {
   try {
-    const docKey = classCode ? classCode + "__" + studentName : studentName;
+    const docKey = docId || (classCode ? classCode + "__" + studentName : studentName);
     await _db.collection("leerling_voortgang").doc(docKey).delete();
   } catch (e) {
     console.warn("fbDeleteProgress fout:", e); }
+}
+
+/**
+ * Is deze naam in deze klas al in gebruik door een ándere leerling?
+ * (Hoofdletters en spaties maken niet uit.) Bij een fout (offline) → false.
+ * @param {string} classCode
+ * @param {string} name
+ * @param {string} uid  eigen uid, wordt overgeslagen
+ */
+async function fbNameTaken(classCode, name, uid) {
+  try {
+    if (!classCode) return false;
+    const want = (name || "").trim().toLowerCase();
+    const snap = await _db.collection("leerling_voortgang").where("classCode", "==", classCode).get();
+    return snap.docs.some(function (d) {
+      const x = d.data();
+      return (x.name || "").trim().toLowerCase() === want && (!uid || x.uid !== uid);
+    });
+  } catch (e) {
+    console.warn("fbNameTaken fout:", e);
+    return false;
+  }
 }
