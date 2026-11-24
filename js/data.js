@@ -11,7 +11,8 @@ const BADGES = {
   b3:{name:"Fabelkenner",     icon:"📖"},
   b4:{name:"Leerling-schrijver",icon:"✍️"},
   b5:{name:"Fabelmaker",      icon:"🪶"},
-  b6:{name:"Meester van de Moraal", icon:"🏛️"}
+  b6:{name:"Meester van de Moraal", icon:"🏛️"},
+  b2b:{name:"Vriend van het Volk",  icon:"🌾"}
 };
 
 /* Inspiratiekaarten voor de fabel (H5) */
@@ -184,10 +185,11 @@ const CHAPTERS = [
     steps:[
       {
         type:"narrative", title:"Le Roi-Soleil",
+        narrator:{ img:"img/louis14.jpg", name:"Lodewijk XIV — le Roi-Soleil" },
         jean:[
-          "In mijn tijd regeerde <strong>Lodewijk XIV</strong> (Louis Quatorze), bijgenaamd <em>le Roi-Soleil</em> — de <strong>Zonnekoning</strong>. Bekijk hieronder zijn echte staatsieportret.",
-          "Hij bouwde het immense <strong>Château de Versailles</strong>, waar het hof leefde in weelde: spiegels, tuinen, bals en intriges.",
-          "Kunstenaars en schrijvers zochten de gunst van de koning. Loop met mij mee door het échte Versailles en ontdek de geheimen van het hof."
+          "Je staat voor de koning van Frankrijk. Ik ben <strong>Lodewijk XIV</strong>, <em>le Roi-Soleil</em> — de Zonnekoning. Heel Frankrijk buigt voor mijn wil.",
+          "Ik heb dit immense <strong>Château de Versailles</strong> laten bouwen. Mijn hof leeft hier in weelde: spiegels, tuinen, bals en intriges. Alles straalt mijn macht uit.",
+          "Kunstenaars en schrijvers zoeken mijn gunst. Volg mij nu door het échte Versailles en ontdek de geheimen van mijn hof."
         ],
         readText:`<p class="read-label">📜 <em>Saint-Simon — Mémoires (geschreven ±1700, over het leven aan het hof)</em></p>
 <blockquote class="read-quote">
@@ -209,7 +211,7 @@ const CHAPTERS = [
       },
       {
         type:"tour", title:"Belevenis — Loop mee met de Zonnekoning",
-        intro:"Stap in de 17e eeuw. Volg Lodewijk XIV door de échte zalen van Versailles — en ontdek daarna hoe anders het leven van de gewone burger eruitzag. Klik op ▶ Volgende om verder te lopen.",
+        intro:"Stap in de 17e eeuw en volg Lodewijk XIV door de échte zalen van Versailles. Ontdek de weelde van het paleis dat het gewone volk moest betalen. Klik op ▶ Volgende om verder te lopen.",
         rooms:[
           {
             img:"img/versailles.jpg", name:"1. De Cour de Marbre", fr:"la Cour de Marbre",
@@ -230,16 +232,6 @@ const CHAPTERS = [
             img:"img/jardins.jpg", name:"4. De tuinen", fr:"les jardins",
             text:"In de eindeloze <strong>tuinen</strong> van tuinarchitect André Le Nôtre wandelde het hof tussen fonteinen en perfect geknipte hagen. 's Avonds waren er feesten, muziek en vuurwerk. Zelfs de natuur moest buigen voor de wil van de koning.",
             fact:"De tuinen zijn zó groot dat je er kilometers in kunt wandelen — met honderden fonteinen."
-          },
-          {
-            img:"img/paysans.jpg", name:"5. Buiten de poorten: de gewone burger", fr:"le paysan / le peuple",
-            text:"Maar buiten de vergulde poorten was het leven héél anders. De gewone burger — vooral de <strong>boer</strong> (<em>le paysan</em>) — werkte hard op het land en betaalde zware <strong>belastingen</strong> om de weelde van het hof te betalen. Veel gezinnen leefden in armoede, in kleine, donkere huizen.",
-            fact:"Schilderij: « Famille de paysans » van Louis Le Nain (±1642), Musée du Louvre."
-          },
-          {
-            img:"img/boeren.jpg", name:"6. Een maaltijd van het volk", fr:"le repas des paysans",
-            text:"Een boerenmaaltijd bestond vaak uit <strong>brood, soep en soms wat wijn</strong>. Terwijl het hof feestte, wisten veel families niet of er de volgende dag genoeg te eten zou zijn. Juist die tegenstelling tussen arm en rijk zag Jean de La Fontaine — en verwerkte hij in zijn fabels.",
-            fact:"« La raison du plus fort est toujours la meilleure » — het recht van de sterkste. La Fontaine bekritiseerde zo de macht van de rijken."
           }
         ]
       },
@@ -335,6 +327,157 @@ const CHAPTERS = [
         ],
         code:"1682", codeHint:"4 cijfers — het jaar waarin de koning en het hof officieel naar Versailles verhuisden. Lees de tekst nog eens!",
         success:"De spiegels verschuiven en onthullen Jeans boodschap: « Observe le monde, et tu comprendras les hommes. » Je bent nu Hofgeleerde!"
+      }
+    ]
+  },
+
+  /* ================= HOOFDSTUK 2b — HET VOLK ================= */
+  {
+    id:"ch2b", num:"2b", badge:"b2b",
+    title:"Het volk buiten de poorten",
+    subtitle:"Het dagelijks leven in het 17e-eeuwse Frankrijk",
+    emoji:"🌾",
+    goal:"Vergelijk het harde bestaan van gewone burgers met de weelde aan het hof en leg de link met La Fontaine's fabels.",
+    steps:[
+      {
+        type:"narrative", title:"La raison du plus fort",
+        jean:[
+          "Je hebt het weelderige hof van Versailles gezien — de spiegels, de tuinen, de bals. Maar <strong>buiten de vergulde poorten</strong> was het leven heel anders.",
+          "Ik, Jean de La Fontaine, zag die ongelijkheid met eigen ogen. De <em>boer</em>, de <em>koopman</em>, de <em>ambachtsman</em> — zij betaalden zware belastingen, terwijl de adel feestte. Die tegenstelling verwerkte ik in mijn fabels.",
+          "« La raison du plus fort est toujours la meilleure. » — Het recht van de sterkste is altijd het beste. Stap nu in het leven van het gewone volk."
+        ],
+        readText:`<p class="read-label">📜 <em>La Fontaine — Fables I, 10 : Le Loup et l'Agneau (1668, eerste regels)</em></p>
+<blockquote class="read-quote">
+  « La <span class="tt" data-tip="de reden / the reason">raison</span> du plus <span class="tt" data-tip="sterk / strong">fort</span> est <span class="tt" data-tip="altijd / always">toujours</span> la <span class="tt" data-tip="beste / best">meilleure</span> ;<br>
+  Nous l'allons <span class="tt" data-tip="laten zien / show">montrer</span> tout à l'<span class="tt" data-tip="ogenblik / instant">heure</span>. »
+</blockquote>
+<p class="read-trans">→ Het recht van de sterkste is altijd het beste — dat zullen we zo meteen laten zien.</p>`,
+        readTextSimple:`<p class="read-label">📜 <em>La Fontaine over macht — vereenvoudigd</em></p>
+<p class="read-simple-text">La Fontaine schrijft: de sterkste heeft altijd gelijk. Net als de wolf die de onschuldige lammeren de schuld geeft. Zo was het ook in de 17e eeuw: de koning en de adel hadden de macht, de gewone burger niet.</p>`,
+        check:[
+          {v:"Wat betekent 'la raison du plus fort est toujours la meilleure'?",
+           options:["De sterkste heeft altijd gelijk","De slimste wint altijd","Vriendelijkheid is de beste aanpak","Geld maakt gelukkig"], correct:0},
+          {v:"Wie betaalde de weelde van Versailles in de 17e eeuw?",
+           options:["De Spaanse koning","Gewone burgers via belastingen","De kerk","Rijke kooplieden uit Amerika"], correct:1}
+        ],
+        images:[
+          {src:"img/paysans.jpg", cap:"'Famille de paysans' — Louis Le Nain (±1642). Leven buiten het hof."},
+          {src:"img/boeren.jpg",  cap:"Een eenvoudige boerenmaaltijd: brood, soep en soms wat wijn."}
+        ]
+      },
+      {
+        type:"tour", title:"Een dag in het leven van het volk",
+        intro:"Stap uit het paleis en in het dagelijks leven van gewone Fransen in de 17e eeuw. Wie zijn zij, hoe wonen zij, hoe overleven zij? Klik op ▶ Volgende.",
+        rooms:[
+          {
+            img:"img/chateauthierry.jpg", name:"1. Het stadje en de markt", fr:"le marché",
+            text:"In kleine steden en dorpen kopen en verkopen gewone burgers hun waren op de markt (<em>le marché</em>): brood, groenten, stof en gereedschap. De <strong>koopman</strong>, de <strong>boer</strong> en de <strong>ambachtsman</strong> ontmoeten elkaar hier. Voor één dag voedsel werkt een boer soms de hele week.",
+            fact:"« À chaque jour suffit sa peine. » — Elke dag heeft zijn eigen lasten. Zo dacht het gewone volk."
+          },
+          {
+            img:"img/champagne.jpg", name:"2. Op het land", fr:"les champs",
+            text:"De meeste gewone Fransen werken als <strong>boer</strong> (<em>le paysan</em>) op het land (<em>les champs</em>). Van zonsopgang tot zonsondergang ploegen, zaaien en oogsten zij. Van elke oogst gaat een groot deel naar de belasting — voor de koning, de adel en de kerk.",
+            fact:"Meer dan 80% van de bevolking van Frankrijk leefde in de 17e eeuw op het platteland."
+          },
+          {
+            img:"img/paysans.jpg", name:"3. De boerenfamilie thuis", fr:"la famille paysanne",
+            text:"Het huis van een boerenfamilie is klein en donker — één kamer voor het hele gezin, soms met de dieren erbij voor warmte. Geen spiegels, geen tuinen, geen zijde. Maar wel: saamhorigheid, verhalen bij het vuur en harde arbeid.",
+            fact:"Terwijl Versailles 357 spiegels had, had een gewoon boerenhuis vaak niet eens glas in de ramen."
+          },
+          {
+            img:"img/boeren.jpg", name:"4. De maaltijd van het volk", fr:"le repas",
+            text:"Brood, soep (<em>la soupe</em>) en soms wat wijn (<em>le vin</em>) — dat is de dagelijkse maaltijd van gewone burgers. Vlees is zeldzaam. Terwijl de koning zijn maaltijd in het openbaar at met honderden toeschouwers, at een boerenfamilie in stilte, hopend dat het genoeg zou zijn.",
+            fact:"Soms had een familie niets. Slechte oogsten leidden tot honger — en soms tot opstand."
+          },
+          {
+            img:"img/versailles.jpg", name:"5. Buiten de vergulde poorten", fr:"derrière les grilles",
+            text:"Hier, buiten de vergulde poorten van Versailles, kijk je omhoog naar het paleis dat jouw belastingen hebben betaald. Je mag er niet in. De lammeren betalen voor de wolf — net als in La Fontaine's fabels.",
+            fact:"De gewone burger kon de Zonnekoning zijn hele leven lang nooit ontmoeten."
+          }
+        ]
+      },
+      {
+        type:"perspective",
+        title:"Keuzepad — Wie ben jij in het 17e-eeuwse volk?",
+        intro:"Het gewone volk was niet één groep. Kies wie jij bent en ontdek jouw wereld. Elk pad heeft zijn eigen vragen!",
+        options:[
+          {
+            id:"paysan", label:"🌾 Een boer", fr:"le paysan",
+            desc:"Je werkt van zonsopgang tot zonsondergang op het land. Je betaalt belasting aan de adel en de kerk. Je hebt weinig — maar je gemeenschap is sterk.",
+            questions:[
+              {q:"Als boer geef je een deel van je oogst af als belasting. Hoe heet deze belasting?",
+               options:["La taille — belasting op personen en bezit","Le loyer — huur","La prime — bonus","Le salaire — loon"], answer:0,
+               explain:"'La taille' was een directe belasting die gewone burgers moesten betalen — de adel was ervan vrijgesteld."},
+              {q:"Wat doet een boer als de oogst mislukt door slecht weer?",
+               options:["Belasting betalen met geleend geld of honger lijden","Naar de koning gaan voor gratis voedsel","Extra werk zoeken aan het hof","De grond ruilen met de buurman"], answer:0,
+               explain:"Een mislukte oogst betekende honger en schulden. De adel hield hun privileges hoe dan ook."},
+              {q:"Wat betekent het Franse woord 'la récolte'?",
+               options:["De oogst","De belasting","De maaltijd","De adel"], answer:0,
+               explain:"'La récolte' = de oogst. Voor een boer was dit het allerbelangrijkste moment van het jaar."},
+              {q:"Welke fabel van La Fontaine toont dat de sterkste altijd zijn zin krijgt, ook als dat oneerlijk is?",
+               options:["Le Loup et l'Agneau — de wolf heeft altijd gelijk","La Cigale et la Fourmi — de mier werkt hard","Le Corbeau et le Renard — ijdelheid bedriegt","Le Lion et la Souris — klein helpt groot"], answer:0,
+               explain:"In 'Le Loup et l'Agneau' maakt de wolf een onschuldig lam de schuld — net zoals de rijken de schuld bij het volk legden."}
+            ]
+          },
+          {
+            id:"marchand", label:"🛒 Een koopman", fr:"le marchand",
+            desc:"Je handelt in stoffen, specerijen of voedsel op de markt. Je hebt meer vrijheid dan een boer — maar ook meer risico. Afhankelijk van seizoenen en de gunst van rijke kopers.",
+            questions:[
+              {q:"Als koopman op de markt, waar ben je het meest bang voor?",
+               options:["Hoge belastingen, diefstal en slechte oogsten","Dat de koning je plotseling bezoekt","Dat de spiegels van Versailles kapotgaan","Dat er te veel klanten op één dag komen"], answer:0,
+               explain:"Kooplieden hadden te maken met belastingen, onveilige wegen en wisselende vraag — altijd onzeker."},
+              {q:"Wat betekent het Franse woord 'le commerce'?",
+               options:["De handel","De belasting","De kerk","De adel"], answer:0,
+               explain:"'Le commerce' = de handel. Kooplieden waren cruciaal voor de economie, maar genoten weinig aanzien bij de adel."},
+              {q:"Hoe verschilt jouw leven als koopman van dat van een hoveling aan het hof?",
+               options:["Ik verdien mijn geld zelf; de hoveling leeft van de gunst van de koning","Ik heb meer weelde dan de hoveling","Ik betaal geen belasting maar de hoveling wel","Ik woon ook in Versailles, maar aan de rand"], answer:0,
+               explain:"Kooplieden werkten zelfstandig; hovelingen waren volledig afhankelijk van de gunst van de koning."},
+              {q:"Welke fabel van La Fontaine toont dat slim zijn je verder brengt dan brute kracht?",
+               options:["Le Renard et le Bouc — de slimme vos redt zichzelf","La Cigale et la Fourmi — de mier spaart voor de winter","Le Loup et l'Agneau — de sterkste heeft altijd gelijk","Le Corbeau et le Renard — ijdelheid bedriegt"], answer:0,
+               explain:"De vos gebruikt zijn slim verstand om te overleven — net als een goede koopman."}
+            ]
+          },
+          {
+            id:"artisan", label:"🔨 Een ambachtsman", fr:"l'artisan",
+            desc:"Je maakt dingen met je handen: hout, leer, metaal of stof. Je hebt een vak geleerd en bent trots op je werk. Maar de adel betaalt slecht — of helemaal niet.",
+            questions:[
+              {q:"Wat maakt een ambachtsman bijzonder vergeleken met een gewone dagloner?",
+               options:["Hij heeft een specifiek vak geleerd en maakt unieke producten","Hij hoeft geen belasting te betalen aan de adel","Hij woont gratis aan het hof van Versailles","Hij werkt alleen in de zomer en heeft de rest van het jaar vrij"], answer:0,
+               explain:"Ambachtslieden hadden een geleerd vak — timmerman, leerwerker, smid — en maakten producten die anderen nodig hadden."},
+              {q:"Wat betekent 'l'atelier' in het Frans?",
+               options:["De werkplaats","De markt","Het hof","De slaapkamer van de koning"], answer:0,
+               explain:"'L'atelier' = de werkplaats. Hier maakte de ambachtsman zijn producten met eigen handen."},
+              {q:"De adel bestelt dure meubels bij jou als timmerman, maar betaalt niet. Welke fabelmoraal past hier het best?",
+               options:["'La raison du plus fort' — de sterkste heeft altijd gelijk","'Tout vient à point' — geduld wordt beloond","'Le travail paie' — hard werken wordt beloond","'Aide-toi' — help jezelf"], answer:0,
+               explain:"La Fontaine's boodschap: de machtigen leven op kosten van de anderen. De ambachtsman herkende dat maar al te goed."},
+              {q:"Wat betekent het Franse woord 'le métier'?",
+               options:["Het vak of beroep","De belasting","De markt","De oogst"], answer:0,
+               explain:"'Le métier' = het beroep of vak. Voor een ambachtsman was dit zijn identiteit en trots."}
+            ]
+          }
+        ]
+      },
+      {
+        type:"match", title:"Woordenschat — Het volk in het Frans",
+        intro:"Verbind elk Frans woord met de juiste Nederlandse betekenis. Klik een Frans woord aan en daarna de vertaling.",
+        leftLabel:"Français", rightLabel:"Nederlands",
+        pairs:[
+          {left:"le paysan",  right:"de boer"},
+          {left:"le marché",  right:"de markt"},
+          {left:"la taille",  right:"de belasting"},
+          {left:"la récolte", right:"de oogst"},
+          {left:"l'atelier",  right:"de werkplaats"},
+          {left:"le peuple",  right:"het volk"}
+        ]
+      },
+      {
+        type:"reflect", title:"Jouw blik — Hof versus volk",
+        intro:"Schrijf jouw antwoorden hieronder. Er is geen goed of fout — gebruik je eigen woorden en minstens één Frans woord uit dit hoofdstuk.",
+        questions:[
+          "Wat vind jij het opvallendst aan het verschil tussen het leven aan het hof en het leven van het gewone volk?",
+          "Welke fabel van La Fontaine past het beste bij dit verschil tussen arm en rijk, en waarom?",
+          "Als jij in het 17e-eeuwse Frankrijk had geleefd, wie had je dan liever geweest: een hoveling, een boer, een koopman of een ambachtsman? Leg uit."
+        ]
       }
     ]
   },

@@ -1085,9 +1085,11 @@
      ========================================================= */
   const RENDER = {};
 
-  function jeanSay(paras) {
+  function jeanSay(paras, narrator) {
+    const imgSrc = (narrator && narrator.img) ? narrator.img : "img/jean_portrait.jpg";
+    const imgAlt = (narrator && narrator.name) ? narrator.name : "Jean de La Fontaine";
     return h("div", { class: "jean-say" },
-      h("div", { class: "mini-avatar" }, h("img", { src: "img/jean_portrait.jpg", alt: "Jean de La Fontaine" })),
+      h("div", { class: "mini-avatar" }, h("img", { src: imgSrc, alt: imgAlt, style: "object-position:top center" })),
       h("div", { class: "say-text", html: paras.map((p) => "<p style='margin:.3em 0'>" + p + "</p>").join("") })
     );
   }
@@ -1098,7 +1100,8 @@
 
   /* ---- narrative ---- */
   RENDER.narrative = function (step, ch, idx, done, onDone) {
-    const card = h("div", { class: "activity-card" }, h("h3", {}, step.title), jeanSay(step.jean));
+    const narrator = step.narrator || null;
+    const card = h("div", { class: "activity-card" }, h("h3", {}, step.title), jeanSay(step.jean, narrator));
 
     // Afbeeldingen
     if (step.images && step.images.length) {
@@ -2100,7 +2103,7 @@
         h("div", { class: "cert-name" }, profile.name),
         h("p", { class: "cert-body" }, "met succes de leerreis « In de voetsporen van Jean de La Fontaine » heeft voltooid, alle zes hoofdstukken heeft afgerond en de titel verdient van:"),
         h("h2", { style: "color:var(--gold-deep)" }, "🏛️ Meester van de Moraal"),
-        h("p", { class: "cert-body" }, "Verzamelde veren: 🪶 " + progress.feathers + "  ·  Badges: " + (progress.badges.length) + "/6"),
+        h("p", { class: "cert-body" }, "Verzamelde veren: 🪶 " + progress.feathers + "  ·  Badges: " + (progress.badges.length) + "/7"),
         h("div", { class: "cert-sign" }, "Jean de La Fontaine"),
         h("p", { class: "cert-body", style: "font-size:.95rem;color:var(--ink-soft)" }, "Château-Thierry · " + dateStr)
       );
@@ -2273,7 +2276,7 @@
         h("div", {}, h("div", { class: "profile-name" }, profile.name), h("div", { class: "profile-role" }, "Leerling-schrijver van Jean"))),
       h("div", { class: "stat-row" },
         h("div", { class: "stat" }, h("span", { class: "big" }, "🪶 " + progress.feathers), h("span", { class: "lbl" }, "Veren")),
-        h("div", { class: "stat" }, h("span", { class: "big" }, progress.badges.length + "/6"), h("span", { class: "lbl" }, "Badges")),
+        h("div", { class: "stat" }, h("span", { class: "big" }, progress.badges.length + "/7"), h("span", { class: "lbl" }, "Badges")),
         h("div", { class: "stat" }, h("span", { class: "big" }, pctAll + "%"), h("span", { class: "lbl" }, "Voltooid"))
       ),
       h("div", { style: "margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center" },
@@ -2376,26 +2379,46 @@
      ========================================================= */
   function renderLeaderboard(view) {
     view.append(h("div", { class: "view-head" }, h("h2", {}, "🏆 Ranglijst van de klas"), h("p", {}, "Wie verzamelt de meeste veren? Blijf spelen om te stijgen!")));
-    const sorted = [...board].sort((a, b) => (b.feathers - a.feathers) || (b.badges - a.badges));
     const card = h("div", { class: "dash-card" });
-    if (!sorted.length) { card.append(h("div", { class: "board-empty" }, "Nog geen spelers.")); view.append(card); return; }
-    const table = h("table", { class: "board-table" },
-      h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Speler"), h("th", {}, "🪶 Veren"), h("th", {}, "🎖️ Badges"))));
-    const tb = h("tbody", {});
-    sorted.forEach((r, i) => {
-      const av = h("span", { class: "board-avatar" }); avatarInto(av, r.avatar);
-      const rankCls = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "";
-      const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
-      tb.append(h("tr", { class: "board-row" + (r.me ? " me" : "") },
-        h("td", {}, h("span", { class: "rank-badge " + rankCls }, medal)),
-        h("td", {}, av, r.name + (r.me ? " (jij)" : "")),
-        h("td", {}, "🪶 " + r.feathers),
-        h("td", {}, "🎖️ " + r.badges)));
-    });
-    table.append(tb);
-    card.append(table);
     view.append(card);
-    view.append(h("p", { style: "text-align:center;color:#c9b48a;font-style:italic;margin-top:14px" }, "De ranglijst wordt automatisch opgeslagen op dit apparaat."));
+
+    function toonRanglijst(spelers) {
+      card.innerHTML = "";
+      if (!spelers.length) { card.append(h("div", { class: "board-empty" }, "Nog geen spelers.")); return; }
+      const table = h("table", { class: "board-table" },
+        h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Speler"), h("th", {}, "🪶 Veren"), h("th", {}, "🎖️ Badges"))));
+      const tb = h("tbody", {});
+      spelers.forEach(function(r, i) {
+        const av = h("span", { class: "board-avatar" }); avatarInto(av, r.avatar || "🙂");
+        const rankCls = i === 0 ? "rank-1" : i === 1 ? "rank-2" : i === 2 ? "rank-3" : "";
+        const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : (i + 1);
+        const isMe = profile && r.name === profile.name;
+        tb.append(h("tr", { class: "board-row" + (isMe ? " me" : "") },
+          h("td", {}, h("span", { class: "rank-badge " + rankCls }, medal)),
+          h("td", {}, av, r.name + (isMe ? " (jij)" : "")),
+          h("td", {}, "🪶 " + (r.feathers || 0)),
+          h("td", {}, "🎖️ " + (r.badges || (Array.isArray(r.badges) ? r.badges.length : 0)))));
+      });
+      table.append(tb);
+      card.append(table);
+    }
+
+    // Probeer Firebase-ranglijst (per klas) te laden
+    if (classCode && typeof fbLoadAllProgress === "function") {
+      card.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.9rem" }, "Ranglijst laden…"));
+      fbLoadAllProgress(classCode).then(function(data) {
+        const spelers = data.sort(function(a, b) { return (b.feathers || 0) - (a.feathers || 0); });
+        toonRanglijst(spelers);
+      }).catch(function() {
+        // Fallback: lokale ranglijst
+        const sorted = [...board].sort((a, b) => (b.feathers - a.feathers) || (b.badges - a.badges));
+        toonRanglijst(sorted);
+      });
+    } else {
+      // Geen klascode: lokale ranglijst
+      const sorted = [...board].sort((a, b) => (b.feathers - a.feathers) || (b.badges - a.badges));
+      toonRanglijst(sorted);
+    }
 
     // ---- docent-zone: alleen dit (gemachtigde) apparaat kan de ranglijst resetten ----
     if (isTeacher()) {
@@ -3297,10 +3320,12 @@
         });
         stage.append(mk);
       });
-      // Jean-gids
+      // Jean-gids (of Zonnekoning voor ch2)
       const line = s.guide[Math.min(gi, s.guide.length - 1)];
+      const guideImg2 = chId === "ch2" ? "img/louis14.jpg" : "img/jean_portrait.jpg";
+      const guideAlt2 = chId === "ch2" ? "Lodewijk XIV" : "Jean";
       stage.append(h("div", { class: "imm-guide" },
-        h("div", { class: "imm-jean" }, h("img", { src: "img/jean_portrait.jpg", alt: "Jean" })),
+        h("div", { class: "imm-jean" }, h("img", { src: guideImg2, alt: guideAlt2 })),
         h("div", { class: "imm-guidebody" },
           h("div", { class: "imm-say" }, line),
           h("div", { class: "imm-guidebtns" },
@@ -3533,8 +3558,10 @@
         h("button", { class: "btn btn-ghost small", title: "Sfeergeluid aan/uit", onClick: function () { const m = !Ambient.isMuted(); Ambient.setMuted(m); save("flf_muted", m); drawOverlay(); } }, Ambient.isMuted() ? "🔇" : "🔊"),
         h("button", { class: "btn btn-ghost small", onClick: function () { go("chapter", num); } }, "✕ Verlaten")));
       const line = cfg.guide[Math.min(gi, cfg.guide.length - 1)];
+      const panoGuideImg = chId === "ch2" ? "img/louis14.jpg" : "img/jean_portrait.jpg";
+      const panoGuideAlt = chId === "ch2" ? "Lodewijk XIV" : "Jean";
       overlay.append(h("div", { class: "imm-guide" },
-        h("div", { class: "imm-jean" }, h("img", { src: "img/jean_portrait.jpg", alt: "Jean" })),
+        h("div", { class: "imm-jean" }, h("img", { src: panoGuideImg, alt: panoGuideAlt })),
         h("div", { class: "imm-guidebody" },
           h("div", { class: "imm-say" }, line),
           h("div", { class: "imm-guidebtns" },
@@ -4113,16 +4140,22 @@
     });
   }
 
-  if (profile && classCode) {
+  if (isTeacher()) {
+    // Docent: altijd direct naar de app, Beheer-knop altijd zichtbaar
+    $("#screen-onboarding").classList.remove("active");
+    $("#app-shell").classList.remove("hidden");
+    showBanqueLauncher();
+    refreshDocentNav();
+    go("docentbeheer");
+  } else if (profile && classCode) {
     $("#screen-onboarding").classList.remove("active");
     $("#app-shell").classList.remove("hidden");
     showBanqueLauncher();
     syncBoard();
     refreshChrome();
     updateAankondiging();
-    refreshDocentNav();
     go("intro");
-  } else if (!classCode && !isTeacher()) {
+  } else if (!classCode) {
     initKlascodeScherm();
   } else {
     initOnboarding();
