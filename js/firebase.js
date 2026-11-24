@@ -5,9 +5,9 @@
 
 const _firebaseConfig = {
   apiKey: "AIzaSyBWe00mZ2vLNi3WU_bW8L3C1r47R9PI5Xk",
-  authDomain: "jean-de-la-fontaine-d6251.firebaseapp.com",
-  projectId: "jean-de-la-fontaine-d6251",
-  storageBucket: "jean-de-la-fontaine-d6251.firebasestorage.app",
+  authDomain: "jeandelafontaine-9c006.firebaseapp.com",
+  projectId: "jeandelafontaine-9c006",
+  storageBucket: "jeandelafontaine-9c006.firebasestorage.app",
   messagingSenderId: "15976543464",
   appId: "1:15976543464:web:5b5a1607bbbb86ab7bc55d",
   measurementId: "G-PNQZSM0NP7"
