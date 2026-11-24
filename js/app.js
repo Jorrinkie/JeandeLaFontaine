@@ -213,8 +213,9 @@
   const chapterProgressPct = (ch) => Math.round(ch.steps.filter((_, i) => isStepDone(ch.id, i)).length / ch.steps.length * 100);
   function chapterUnlocked(num) {
     if (isTeacher()) return true;            // docent navigeert vrij; leerlingen houden de vergrendeling
-    if (num <= 1) return true;
-    return chapterDone(CHAPTERS[num - 2]);
+    const idx = CHAPTERS.findIndex(c => String(c.num) === String(num));
+    if (idx <= 0) return true;
+    return chapterDone(CHAPTERS[idx - 1]);
   }
   const stepsDoneCount = () => Object.keys(progress.stepsDone).filter((k) => progress.stepsDone[k]).length;
 
@@ -246,7 +247,7 @@
       syncBoard();
       const b = BADGES[ch.badge];
       setTimeout(() => {
-        const next = CHAPTERS[ch.num]; // ch.num is 1-based → next index
+        const next = CHAPTERS[CHAPTERS.indexOf(ch) + 1]; // volgende hoofdstuk op basis van positie in array
         const extra = next ? "<p>Nieuw hoofdstuk ontgrendeld: <strong>" + next.num + ". " + next.title + "</strong></p>" : "";
         showModal("🎖️", "Badge verdiend!", "<p>Je hebt de badge <strong>" + b.icon + " " + b.name + "</strong> behaald!</p>" + extra);
       }, 500);
@@ -984,7 +985,7 @@
       h("p", {}, "Volg het pad van Jean de La Fontaine. Voltooi elk hoofdstuk om het volgende te ontgrendelen.")
     ));
     const path = h("div", { class: "map-path" });
-    CHAPTERS.forEach((ch) => {
+    CHAPTERS.forEach((ch, chIdx) => {
       const unlocked = chapterUnlocked(ch.num);
       const done = chapterDone(ch);
       const pct = chapterProgressPct(ch);
@@ -1004,7 +1005,7 @@
           h("span", { class: "status-pill " + (done ? "done" : unlocked ? "open" : "locked") }, done ? "Voltooid ✓" : unlocked ? "Beschikbaar" : "🔒 Op slot"),
           unlocked
             ? h("button", { class: "btn " + (done ? "btn-ghost" : "btn-gold") + " small", onClick: () => go("chapter", ch.num) }, done ? "Herbekijk" : "Start")
-            : h("span", { class: "lock-hint", style: "font-size:.78rem;color:#7a684a" }, "Rond H" + (ch.num - 1) + " af")
+            : h("span", { class: "lock-hint", style: "font-size:.78rem;color:#7a684a" }, "Rond H" + (CHAPTERS[chIdx - 1] ? CHAPTERS[chIdx - 1].num : "") + " af")
         )
       );
       path.append(card);
@@ -1016,7 +1017,7 @@
      CHAPTER VIEW
      ========================================================= */
   function renderChapter(view, num) {
-    const ch = CHAPTERS[num - 1];
+    const ch = CHAPTERS.find(c => String(c.num) === String(num));
     if (!chapterUnlocked(ch.num)) { go("map"); return; }
     let cur = ch.steps.findIndex((_, i) => !isStepDone(ch.id, i));
     if (cur === -1) cur = 0;
