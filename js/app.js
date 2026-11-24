@@ -829,7 +829,9 @@
         const verenSpan = h("span", { style: "color:var(--gold);font-weight:600" }, "🪶 " + (leerling.feathers || 0));
         const stappenSpan = h("span", { style: "color:var(--ink-soft);font-size:.85rem" }, stappen + " stap" + (stappen !== 1 ? "pen" : "") + " klaar");
         const toggleBtn = h("button", { class: "btn btn-ghost small", style: "margin-left:auto" }, "▼ Details");
-        headerRij.append(avatarSpan, naamSpan, verenSpan, stappenSpan, toggleBtn);
+        const qs = quizScore(leerling.answers || {}, null);
+        const quizSpan = qs.total ? h("span", { style: "color:var(--ink-soft);font-size:.85rem" }, "🎯 " + qs.ok + "/" + qs.total + " quizvragen in één keer goed · " + qs.pog + " pogingen totaal") : null;
+        headerRij.append(avatarSpan, naamSpan, verenSpan, stappenSpan, quizSpan, toggleBtn);
 
         // Detail sectie (verborgen bij start)
         const detailSectie = h("div", { style: "display:none;margin-top:12px;border-top:1px solid var(--parchment-dark);padding-top:12px" });
@@ -850,32 +852,10 @@
           );
         }
 
-        // Reflecties / open antwoorden
-        const reflectAntwoorden = Object.keys(leerling.answers || {}).filter(function(k) {
-          return /:r\d+$/.test(k) && leerling.answers[k] && leerling.answers[k].trim();
-        });
-        if (reflectAntwoorden.length > 0) {
-          const reflectDiv = h("div", {});
-          reflectDiv.append(h("h4", { style: "color:var(--royal);margin:0 0 6px" }, "💬 Reflecties"));
-          const ul = h("ul", { style: "margin:0 0 12px;padding-left:18px;font-size:.85rem;line-height:1.6" });
-          reflectAntwoorden.forEach(function(k) { ul.append(h("li", {}, leerling.answers[k])); });
-          reflectDiv.append(ul);
-          detailSectie.append(reflectDiv);
-        }
-
-        // Peertips
-        const peertipKeys = Object.keys(leerling.answers || {}).filter(function(k) { return k.startsWith("peertip_") && leerling.answers[k] && leerling.answers[k].trim(); });
-        if (peertipKeys.length > 0) {
-          const ptDiv = h("div", {});
-          ptDiv.append(h("h4", { style: "color:var(--royal);margin:0 0 6px" }, "💡 Peertips"));
-          const ul = h("ul", { style: "margin:0 0 12px;padding-left:18px;font-size:.85rem;line-height:1.6" });
-          peertipKeys.forEach(function(k) { ul.append(h("li", {}, leerling.answers[k])); });
-          ptDiv.append(ul);
-          detailSectie.append(ptDiv);
-        }
-
-        if (!atelierTekst && reflectAntwoorden.length === 0 && peertipKeys.length === 0) {
-          detailSectie.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.85rem" }, "Nog geen open antwoorden ingevuld."));
+        // Voortgang per hoofdstuk: open antwoorden met vraagtekst + quizresultaten (eerste poging)
+        detailSectie.append(buildVoortgangDetails(leerling));
+        if (!atelierTekst && !heeftVoortgangData(leerling)) {
+          detailSectie.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.85rem" }, "Nog geen antwoorden ingevuld."));
         }
 
         // Verwijder-knop (docent kan leerling resetten)
@@ -920,6 +900,139 @@
 
     document.getElementById("btn-refresh-leerlingen").addEventListener("click", laadLeerlingen);
     laadLeerlingen();
+  }
+
+  /* ── Docent: voortgangsdetails per leerling ─────────────── */
+  const DV_LABELS = {
+    plan: "Wat neem je mee naar je volgende versie?",
+    titre: "Titel", pers: "Personages", lieu: "Waar speelt het?", prob: "Probleem / conflict",
+    fin: "Afloop", mfr: "Moraal (Frans)", mnl: "Moraal (Nederlands)", story: "Verhaal"
+  };
+  const DV_SMALL = "font-size:.85rem;line-height:1.55";
+  function quizScore(answers, prefix) {
+    let ok = 0, total = 0, pog = 0;
+    Object.keys(answers).forEach(function (k) {
+      if (!/^(quiz|fquiz):/.test(k)) return;
+      if (prefix && k.indexOf(prefix) !== 0) return;
+      const v = answers[k];
+      if (!Array.isArray(v)) return;
+      total++; if (v[0] === 1) ok++;
+      pog += v[2] || 1;
+    });
+    return { ok: ok, total: total, pog: pog };
+  }
+  function heeftVoortgangData(leerling) {
+    const a = leerling.answers || {};
+    return Object.keys(a).some(function (k) {
+      const v = a[k];
+      if (/^(quiz|fquiz):/.test(k)) return Array.isArray(v);
+      return typeof v === "string" && v.trim() && (/^ch[^:]*:\d+:/.test(k) || /^prep:/.test(k) || /^peertip_/.test(k));
+    });
+  }
+  // Eén quizvraag als regel: ✅/❌ + vraag, bij fout ook het gekozen en het juiste antwoord
+  function dvQuizRegel(q, res, nr) {
+    const goed = res[0] === 1;
+    const n = res[2];
+    const li = h("li", { style: "margin-bottom:4px" },
+      h("span", {}, (goed ? "✅ " : "❌ ") + (nr ? nr + ". " : "") + q.q));
+    if (n) li.append(h("span", { style: "margin-left:6px;padding:0 7px;border-radius:9px;font-size:.78rem;white-space:nowrap;" + (n === 1 ? "background:#e6f4ea;color:#1e7e34" : n === 2 ? "background:#fff3cd;color:#8a6d00" : "background:#fde2e1;color:#b02a37") },
+      n + (n === 1 ? " poging" : " pogingen")));
+    if (!goed) {
+      const gekozen = q.options && q.options[res[1]] !== undefined ? q.options[res[1]] : "?";
+      li.append(h("div", { style: "color:var(--ink-soft);margin-left:22px" },
+        "Koos eerst: «" + gekozen + "» · juist: «" + q.options[q.answer] + "»"));
+    }
+    return li;
+  }
+  function dvAntwoord(label, tekst) {
+    return h("div", { style: "margin:0 0 8px" },
+      h("div", { style: "font-weight:600;color:var(--ink-soft)" }, label),
+      h("div", { style: "white-space:pre-wrap;background:#fff8f0;border:1px solid var(--parchment-dark);border-radius:8px;padding:6px 9px" }, tekst));
+  }
+  function dvUitklap(titel, open) {
+    const d = h("details", { style: "border:1px solid var(--parchment-dark);border-radius:10px;padding:8px 12px;margin:0 0 8px;background:#fffdf8;" + DV_SMALL });
+    if (open) d.open = true;
+    d.append(h("summary", { style: "cursor:pointer;font-weight:600;color:var(--royal)" }, titel));
+    return d;
+  }
+  function buildVoortgangDetails(leerling) {
+    const a = leerling.answers || {};
+    const sd = leerling.stepsDone || {};
+    const wrap = h("div", {});
+    const str = function (k) { return typeof a[k] === "string" && a[k].trim() ? a[k].trim() : ""; };
+
+    // ── Per hoofdstuk ──
+    wrap.append(h("h4", { style: "color:var(--royal);margin:4px 0 8px" }, "📚 Per hoofdstuk"));
+    (typeof CHAPTERS !== "undefined" ? CHAPTERS : []).forEach(function (ch) {
+      const stappen = ch.steps || [];
+      const klaar = stappen.filter(function (_, i) { return sd[ch.id + ":" + i]; }).length;
+      const qs = quizScore(a, "quiz:" + ch.id + ":");
+      let titel = "H" + ch.num + " · " + ch.title + " — " + klaar + "/" + stappen.length + " stappen klaar";
+      if (qs.total) titel += " · 🎯 " + qs.ok + "/" + qs.total + " quiz in één keer goed (" + qs.pog + " pogingen)";
+      const blok = dvUitklap(titel, false);
+      let iets = false;
+
+      stappen.forEach(function (step, idx) {
+        const pre = ch.id + ":" + idx + ":";
+        const inhoud = [];
+        // quizresultaten
+        if (step.type === "quiz") {
+          const ul = h("ul", { style: "margin:2px 0 8px;padding-left:18px" });
+          (step.questions || []).forEach(function (q, qi) {
+            const r = a["quiz:" + pre + qi];
+            if (Array.isArray(r)) ul.append(dvQuizRegel(q, r, qi + 1));
+          });
+          (step.challenge || []).forEach(function (q, ci) {
+            const r = a["quiz:" + pre + "c" + ci];
+            if (Array.isArray(r)) ul.append(dvQuizRegel(q, r, "Bonus " + (ci + 1)));
+          });
+          if (ul.children.length) inhoud.push(ul);
+        }
+        // open antwoorden van deze stap
+        Object.keys(a).filter(function (k) { return k.indexOf(pre) === 0; }).sort().forEach(function (k) {
+          const t = str(k); if (!t) return;
+          const veld = k.slice(pre.length);
+          let label = DV_LABELS[veld] || veld;
+          const m = /^r(\d+)$/.exec(veld);
+          if (m && step.questions && typeof step.questions[+m[1]] === "string") label = step.questions[+m[1]];
+          inhoud.push(dvAntwoord(label, t));
+        });
+        if (step.type === "peertip" && str("peertip_" + ch.id)) inhoud.push(dvAntwoord("💡 Peertip", str("peertip_" + ch.id)));
+        if (inhoud.length) {
+          iets = true;
+          blok.append(h("div", { style: "margin:8px 0 2px;font-weight:600" },
+            (sd[ch.id + ":" + idx] ? "✓ " : "○ ") + "Stap " + (idx + 1) + " · " + (step.title || step.type)));
+          inhoud.forEach(function (n) { blok.append(n); });
+        }
+      });
+      if (!iets) blok.append(h("p", { style: "color:var(--ink-soft);font-style:italic;margin:6px 0 0" }, "Nog geen antwoorden of quizresultaten in dit hoofdstuk."));
+      wrap.append(blok);
+    });
+
+    // ── Fabelquizzen ──
+    if (typeof FABLES !== "undefined") {
+      const fq = quizScore(a, "fquiz:");
+      if (fq.total) {
+        const blok = dvUitklap("📖 Fabelquizzen — 🎯 " + fq.ok + "/" + fq.total + " in één keer goed (" + fq.pog + " pogingen)", false);
+        FABLES.forEach(function (f) {
+          const ul = h("ul", { style: "margin:2px 0 8px;padding-left:18px" });
+          (f.quiz || []).forEach(function (q, qi) { const r = a["fquiz:" + f.id + ":" + qi]; if (Array.isArray(r)) ul.append(dvQuizRegel(q, r, qi + 1)); });
+          (f.challenge || []).forEach(function (q, ci) { const r = a["fquiz:" + f.id + ":c" + ci]; if (Array.isArray(r)) ul.append(dvQuizRegel(q, r, "Bonus " + (ci + 1))); });
+          if (ul.children.length) blok.append(h("div", { style: "font-weight:600;margin-top:6px" }, f.titleFr || f.id), ul);
+        });
+        wrap.append(blok);
+      }
+    }
+
+    // ── Fabel-voorbereiding ──
+    const prep = [];
+    PREP_QUESTIONS.forEach(function (q, i) { const t = str("prep:" + i); if (t) prep.push(dvAntwoord(q, t)); });
+    if (prep.length) {
+      const blok = dvUitklap("🎯 Fabel-voorbereiding (" + prep.length + "/" + PREP_QUESTIONS.length + ")", false);
+      prep.forEach(function (n) { blok.append(n); });
+      wrap.append(blok);
+    }
+    return wrap;
   }
 
   function updateAankondiging() {
@@ -1268,7 +1381,7 @@
   function penaltyScramble(s) { return s.replace(/\S+/g, function (w) { return w.length > 1 ? penaltyShuffle(w) : w; }); }
   function penaltyGaps(s) { return s.replace(/\S+/g, function (w) { if (w.length <= 3) return w; let o = w[0]; for (let i = 1; i < w.length - 1; i++) { o += /[0-9a-zà-ÿœæ]/i.test(w[i]) ? "·" : w[i]; } return o + w[w.length - 1]; }); }
   // Verschillende "leermoment"-opdrachten bij een fout (à la Blooket). Kiest willekeurig een variant.
-  function buildPenalty(correctText, explain, onCleared) {
+  function buildPenalty(correctText, explain, onCleared, onAttempt) {
     const box = h("div", { class: "penalty-box" });
     const kinds = ["type", "scramble", "gaps", "timer", "read"];
     const kind = kinds[Math.floor(Math.random() * kinds.length)];
@@ -1278,7 +1391,11 @@
       if (hintNode) box.append(hintNode);
       const inp = h("input", { class: "text-input penalty-input", placeholder: "Typ hier...", autocomplete: "off" });
       const chk = h("button", { class: "btn btn-gold small" }, "Controleer ✍️");
-      chk.addEventListener("click", function () { if (normAns(inp.value) === normAns(correctText)) onCleared(); else fail(inp); });
+      chk.addEventListener("click", function () {
+        if (!inp.value.trim()) { fail(inp); return; }
+        if (onAttempt) onAttempt();
+        if (normAns(inp.value) === normAns(correctText)) onCleared(); else fail(inp);
+      });
       inp.addEventListener("keydown", function (e) { if (e.key === "Enter") chk.click(); });
       box.append(h("div", { class: "penalty-row" }, inp, chk));
       setTimeout(function () { inp.focus(); }, 30);
@@ -1312,6 +1429,23 @@
     }
     return box;
   }
+  // Docent-overzicht: per quizvraag [1|0 (eerste keer goed/fout), index eerst gekozen optie, aantal pogingen].
+  // Alleen de eerste keer dat een leerling de vraag maakt telt; opnieuw maken overschrijft niets.
+  // Geeft true terug als deze vraag-weergave het record heeft aangemaakt (dan tellen pogingen hier mee).
+  function logQuizFirst(key, ok, oi) {
+    if (!key || !progress.answers || progress.answers[key] !== undefined) return false;
+    progress.answers[key] = [ok ? 1 : 0, oi, 1];
+    save(LS.progress, progress);
+    scheduleFbSync();
+    return true;
+  }
+  function logQuizAttempt(key) {
+    const v = key && progress.answers ? progress.answers[key] : null;
+    if (!Array.isArray(v)) return;
+    v[2] = (v[2] || 1) + 1;
+    save(LS.progress, progress);
+    scheduleFbSync();
+  }
   // Eén quizvraag. Bij een fout: "leermoment" — je moet het juiste antwoord overschrijven om verder te gaan.
   function renderQuizQ(q, cb, o) {
     o = o || {};
@@ -1325,13 +1459,14 @@
       fb.className = "q-feedback good show"; fb.innerHTML = "✔ " + q.explain;
       block.append(opts, fb); return block;
     }
-    let solved = false, wentWrong = false;
+    let solved = false, wentWrong = false, ownsLog = false;
     const wrongBtns = [];
-    shuffle(q.options.map((t, oi) => ({ t: t, correct: oi === q.answer }))).forEach((opt) => {
+    shuffle(q.options.map((t, oi) => ({ t: t, oi: oi, correct: oi === q.answer }))).forEach((opt) => {
       const btn = h("button", { class: "quiz-opt" }, opt.t);
       if (!opt.correct) wrongBtns.push(btn);
       btn.addEventListener("click", () => {
         if (solved) return;
+        if (logQuizFirst(o.logKey, opt.correct, opt.oi)) ownsLog = true;
         if (opt.correct) {
           btn.classList.add("correct", "locked");
           [...opts.children].forEach((c) => { c.classList.add("locked"); c.disabled = true; });
@@ -1357,7 +1492,7 @@
         fb.className = "q-feedback good show"; fb.innerHTML = "✔ Goed onthouden! " + q.explain;
         gate.innerHTML = "";
         if (cb.onCorrect) cb.onCorrect(false);
-      }));
+      }, function () { if (ownsLog) logQuizAttempt(o.logKey); }));
     }
     block.append(opts);
     // adaptief: extra hulp op de steun-route → een hint die één fout antwoord wegneemt
@@ -1393,7 +1528,7 @@
       card.append(renderQuizQ(q, {
         onCorrect: () => { doneCount++; markDone(); },
         onWrong: () => { mistakes++; }
-      }, { num: qi + 1, done: done }));
+      }, { num: qi + 1, done: done, logKey: "quiz:" + ch.id + ":" + idx + ":" + qi }));
     });
     card.append(finish);
     if (done) finish.append(h("div", { style: "text-align:center;margin-top:12px" }, h("span", { class: "status-pill done" }, "✓ Quiz voltooid")));
@@ -1411,7 +1546,7 @@
         flyFeathers(4); syncBoard(); refreshChrome(); toast("⭐ Bonus! +3 veren voor de extra uitdaging");
       }
       step.challenge.forEach((q, ci) => {
-        body.append(renderQuizQ(q, { onCorrect: () => { cDone++; if (cDone >= cTotal) grantBonus(); }, onWrong: () => { } }, { num: ci + 1 }));
+        body.append(renderQuizQ(q, { onCorrect: () => { cDone++; if (cDone >= cTotal) grantBonus(); }, onWrong: () => { } }, { num: ci + 1, logKey: "quiz:" + ch.id + ":" + idx + ":c" + ci }));
       });
       wrap.append(body);
       if (lv.key === "uitdaging") { wrap.open = true; wrap.prepend(h("div", { class: "adapt-note" }, "🔴 Jij lust wel een uitdaging — probeer deze bonusvragen!")); }
@@ -2849,26 +2984,26 @@
   function levelInfo(lvl) {
     return ({ A1: { cls: "lvl-a1", label: "🟢 A1 · makkelijk" }, A2: { cls: "lvl-a2", label: "🟡 A2 · gemiddeld" }, B1: { cls: "lvl-b1", label: "🔴 B1 · uitdaging" } })[lvl] || { cls: "", label: lvl };
   }
-  function appendQuizQuestions(host, questions) {
+  function appendQuizQuestions(host, questions, logPrefix) {
     const total = questions.length; let doneCount = 0;
     const done = h("div", {});
     questions.forEach((q, qi) => {
       host.append(renderQuizQ(q, {
         onCorrect: () => { doneCount++; if (doneCount === total) { done.innerHTML = ""; done.append(h("div", { style: "text-align:center" }, h("span", { class: "status-pill done" }, "✓ Goed gedaan!"))); } },
         onWrong: () => { }
-      }, { num: qi + 1 }));
+      }, { num: qi + 1, logKey: logPrefix ? logPrefix + qi : null }));
     });
     host.append(done);
   }
   function buildFableQuiz(f) {
     const card = h("div", { class: "activity-card" }, h("h3", {}, "❓ Begrijp je de fabel?"));
-    appendQuizQuestions(card, f.quiz);
+    appendQuizQuestions(card, f.quiz, "fquiz:" + f.id + ":");
     return card;
   }
   function buildFableChallenge(f) {
     const wrap = h("details", { class: "fable-challenge" }, h("summary", {}, "⭐ Extra uitdaging (moeilijker) — voor wie meer aankan"));
     const body = h("div", { class: "challenge-body" });
-    appendQuizQuestions(body, f.challenge);
+    appendQuizQuestions(body, f.challenge, "fquiz:" + f.id + ":c");
     wrap.append(body);
     return wrap;
   }
