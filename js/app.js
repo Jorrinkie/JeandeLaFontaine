@@ -326,8 +326,49 @@
   }
 
   /* =========================================================
-     ONBOARDING
+     ONBOARDING  (nieuw: naam + plaatje + pincode · of inloggen met naam + pincode)
      ========================================================= */
+  // Eenvoudige hash zodat de pincode niet leesbaar in de database staat (geen echte beveiliging).
+  function pinHash(uid, pin) {
+    const str = "jlf|" + uid + "|" + pin;
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+  }
+  const isPin = (p) => /^\d{4}$/.test(p || "");
+  function myDocId() { return profile && classCode ? classCode + "__" + (profile.uid || profile.name) : null; }
+
+  // Voeg voortgang van een ander apparaat (remote) samen met deze (lokaal). remoteWins: bij verschillende antwoorden telt remote.
+  function mergeProgress(remote, remoteWins) {
+    if (!remote) return false;
+    let changed = false;
+    if ((remote.feathers || 0) > (progress.feathers || 0)) { progress.feathers = remote.feathers; changed = true; }
+    Object.keys(remote.stepsDone || {}).forEach(function (k) { if (remote.stepsDone[k] && !progress.stepsDone[k]) { progress.stepsDone[k] = true; changed = true; } });
+    (remote.badges || []).forEach(function (b) { if (progress.badges.indexOf(b) === -1) { progress.badges.push(b); changed = true; } });
+    const ra = remote.answers || {};
+    Object.keys(ra).forEach(function (k) {
+      const lv = progress.answers[k], rv = ra[k];
+      if (lv === undefined) { progress.answers[k] = rv; changed = true; return; }
+      if (/^f?quiz:/.test(k)) return; // eerste poging: bestaande houden
+      if (remoteWins && JSON.stringify(lv) !== JSON.stringify(rv) && typeof lv !== "object") { progress.answers[k] = rv; changed = true; }
+      else if (remoteWins && Array.isArray(lv) && JSON.stringify(lv) !== JSON.stringify(rv)) { progress.answers[k] = rv; changed = true; }
+    });
+    if (changed) save(LS.progress, progress);
+    return changed;
+  }
+
+  function enterApp() {
+    syncBoard();
+    $("#screen-onboarding").classList.remove("active");
+    $("#app-shell").classList.remove("hidden");
+    showBanqueLauncher();
+    refreshChrome();
+    updateAankondiging();
+    go("intro");
+  }
+
   function initOnboarding() {
     const grid = $("#avatar-grid");
     let chosen = null;
@@ -348,8 +389,43 @@
     const nameInput = $("#student-name");
     const startBtn = $("#start-journey");
     const upload = $("#avatar-upload");
+    const errEl = $("#onboarding-error");
+    errEl.textContent = "";
 
-    upload.addEventListener("change", () => {
+    // ── pincode-veld en wissel-knop (eenmalig in de pagina zetten) ──
+    let pinWrap = $("#pin-wrap");
+    if (!pinWrap) {
+      pinWrap = h("div", { id: "pin-wrap" },
+        h("label", { class: "field-label", for: "student-pin", id: "pin-label" }, "Kies een pincode van 4 cijfers:"),
+        h("input", { id: "student-pin", class: "text-input", type: "password", inputmode: "numeric", maxlength: "4", autocomplete: "off", placeholder: "••••", style: "max-width:140px;letter-spacing:.4em;text-align:center" }),
+        h("p", { id: "pin-hint", style: "margin:4px 0 10px;font-size:.85rem;color:var(--ink-soft)" }, "Onthoud deze code goed! Daarmee kun je op een andere laptop verder werken."));
+      startBtn.parentNode.insertBefore(pinWrap, startBtn);
+      const toggle = h("button", { id: "login-toggle", type: "button", style: "display:block;margin:14px auto 0;background:none;border:none;cursor:pointer;color:var(--royal);font-weight:700;font-size:.95rem;text-decoration:underline;opacity:1" }, "");
+      errEl.parentNode.insertBefore(toggle, errEl.nextSibling);
+    }
+    const pinInput = $("#student-pin");
+    const toggleBtn = $("#login-toggle");
+    const avatarParts = [grid, $(".upload-avatar"), grid.previousElementSibling];
+    pinInput.value = "";
+
+    // mode: "nieuw" | "inloggen" | "wijzig" (naam/plaatje wijzigen vanuit het profiel)
+    let mode = profile ? "wijzig" : "nieuw";
+    function setMode(m) {
+      mode = m;
+      errEl.textContent = "";
+      const login = m === "inloggen";
+      avatarParts.forEach((el) => { if (el) el.style.display = login ? "none" : ""; });
+      pinWrap.style.display = m === "wijzig" ? "none" : "";
+      toggleBtn.style.display = m === "wijzig" || !classCode ? "none" : "block";
+      $("#pin-label").textContent = login ? "Je pincode:" : "Kies een pincode van 4 cijfers:";
+      $("#pin-hint").style.display = login ? "none" : "";
+      toggleBtn.textContent = login ? "← Ik ben nieuw, ik wil beginnen" : "Al eerder begonnen op een ander apparaat? Log hier in";
+      startBtn.textContent = login ? "Verder werken ✒️" : m === "wijzig" ? "Opslaan ✒️" : "Begin de reis ✒️";
+      validate();
+    }
+    toggleBtn.onclick = () => setMode(mode === "inloggen" ? "nieuw" : "inloggen");
+
+    upload.onchange = () => {
       const file = upload.files[0];
       if (!file) return;
       if (!file.type.startsWith("image/")) { $("#avatar-upload-name").textContent = "Kies een afbeelding."; return; }
@@ -357,7 +433,6 @@
       reader.onload = () => {
         chosen = reader.result;
         grid.querySelectorAll(".avatar-opt").forEach((n) => n.classList.remove("selected"));
-        // show as extra selected tile
         let tile = grid.querySelector(".avatar-opt.upload-tile");
         if (!tile) { tile = h("button", { class: "avatar-opt upload-tile", type: "button" }); grid.prepend(tile); tile.addEventListener("click", () => pick(chosen, tile)); }
         avatarInto(tile, reader.result);
@@ -366,12 +441,16 @@
         validate();
       };
       reader.readAsDataURL(file);
-    });
+    };
 
     function validate() {
-      startBtn.disabled = !(nameInput.value.trim().length >= 2 && chosen);
+      const naamOk = nameInput.value.trim().length >= 2;
+      if (mode === "inloggen") startBtn.disabled = !(naamOk && isPin(pinInput.value));
+      else if (mode === "nieuw") startBtn.disabled = !(naamOk && chosen && isPin(pinInput.value));
+      else startBtn.disabled = !(naamOk && chosen);
     }
-    nameInput.addEventListener("input", validate);
+    nameInput.oninput = validate;
+    pinInput.oninput = () => { pinInput.value = pinInput.value.replace(/\D/g, "").slice(0, 4); validate(); };
 
     // prefill if editing
     if (profile) {
@@ -385,43 +464,78 @@
         avatarInto(tile, profile.avatar); grid.prepend(tile);
         tile.addEventListener("click", () => pick(chosen, tile));
       }
-      validate();
+    }
+    setMode(mode);
+
+    function bezig(aan) {
+      if (aan) { startBtn.dataset.txt = startBtn.textContent; startBtn.disabled = true; startBtn.textContent = "Even controleren…"; }
+      else { startBtn.textContent = startBtn.dataset.txt || startBtn.textContent; validate(); }
     }
 
-    startBtn.addEventListener("click", async () => {
+    async function doeInloggen(name, pin) {
+      if (typeof fbFindStudents !== "function" || !classCode) { errEl.textContent = "Inloggen lukt alleen met internet en een klascode."; return; }
+      bezig(true);
+      const lijst = await fbFindStudents(classCode, name);
+      bezig(false);
+      if (lijst === null) { errEl.textContent = "Kon niet controleren. Heb je internet?"; return; }
+      if (!lijst.length) { errEl.textContent = "Er is in deze klas niemand met de naam \"" + name + "\". Let op de spelling, of begin als nieuwe leerling."; return; }
+      const idOf = (d) => d.uid || d._id.slice(classCode.length + 2);
+      let doc = lijst.find((d) => d.pinHash && d.pinHash === pinHash(idOf(d), pin));
+      let nieuwePin = false;
+      if (!doc) { doc = lijst.find((d) => !d.pinHash); nieuwePin = !!doc; }
+      if (!doc) { errEl.textContent = "Die pincode klopt niet. Pincode vergeten? Vraag je docent om hem te resetten."; pinInput.value = ""; validate(); return; }
+      const uid = idOf(doc);
+      const avatar = doc.avatar && doc.avatar !== "📷" ? doc.avatar : "🙂";
+      profile = { name: doc.name, avatar: avatar, uid: uid, hasPin: true };
+      save(LS.profile, profile);
+      progress = defaultProgress();
+      progress.scoreResetSeen = Date.now();
+      mergeProgress(doc, true);
+      save(LS.progress, progress);
+      if (nieuwePin && typeof fbSetPin === "function") fbSetPin(myDocId(), pinHash(uid, pin)).catch(function () {});
+      errEl.textContent = "";
+      pushProgress();
+      enterApp();
+      toast(nieuwePin ? "✅ Welkom terug! Je nieuwe pincode is opgeslagen." : "✅ Welkom terug, " + profile.name + "! Je voortgang is opgehaald.");
+    }
+
+    startBtn.onclick = async () => {
       const name = nameInput.value.trim();
-      const errEl = $("#onboarding-error");
+      const pin = pinInput.value;
+      if (mode === "inloggen") { if (name.length >= 2 && isPin(pin)) await doeInloggen(name, pin); return; }
       if (name.length < 2 || !chosen) { errEl.textContent = "Vul een naam in en kies een plaatje."; return; }
+      if (mode === "nieuw" && !isPin(pin)) { errEl.textContent = "Kies een pincode van precies 4 cijfers."; return; }
       const uid = (profile && profile.uid) || makeUid();
       const naamGewijzigd = !profile || profile.name.trim().toLowerCase() !== name.toLowerCase();
-      // Naam al bezet in deze klas door een andere leerling? Dan een andere naam laten kiezen.
+      // Naam al bezet in deze klas door een andere leerling?
       if (naamGewijzigd && classCode && typeof fbNameTaken === "function") {
-        const oudeTekst = startBtn.textContent;
-        startBtn.disabled = true; startBtn.textContent = "Even controleren…";
+        bezig(true);
         const bezet = await fbNameTaken(classCode, name, uid);
-        startBtn.textContent = oudeTekst; validate();
+        bezig(false);
         if (bezet) {
-          errEl.textContent = "Er zit al iemand met de naam \"" + name + "\" in deze klas. Zet de eerste letter van je achternaam erachter, bijvoorbeeld \"" + name + " B.\"";
+          errEl.innerHTML = "";
+          errEl.append("Er zit al iemand met de naam \"" + name + "\" in deze klas. Zet de eerste letter van je achternaam erachter, bijvoorbeeld \"" + name + " B.\"");
+          if (mode === "nieuw") {
+            errEl.append(h("br"), h("button", { type: "button", class: "teacher-link", onClick: () => { setMode("inloggen"); pinInput.focus(); } }, "Ben jij dit en werkte je eerder op een ander apparaat? Log dan in."));
+          }
           nameInput.focus();
           return;
         }
       }
       errEl.textContent = "";
-      profile = { name, avatar: chosen, uid };
+      const nieuw = mode === "nieuw";
+      profile = { name, avatar: chosen, uid, hasPin: nieuw ? true : !!(profile && profile.hasPin) };
       save(LS.profile, profile);
-      // Meteen opslaan, zodat de naam direct "bezet" is voor klasgenoten
       if (classCode && typeof fbSaveProgress === "function") {
         // nieuwe leerling: een eerdere klas-reset geldt niet voor hem
         if (!progress.scoreResetSeen) { progress.scoreResetSeen = Date.now(); save(LS.progress, progress); }
-        fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid).catch(function() {});
+        // Meteen opslaan, zodat de naam direct "bezet" is voor klasgenoten
+        fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid)
+          .then(function () { if (nieuw && typeof fbSetPin === "function") return fbSetPin(myDocId(), pinHash(uid, pin)); })
+          .catch(function () {});
       }
-      syncBoard();
-      $("#screen-onboarding").classList.remove("active");
-      $("#app-shell").classList.remove("hidden");
-      showBanqueLauncher();
-      refreshChrome();
-      go("intro");
-    });
+      enterApp();
+    };
   }
 
   function editProfile() {
@@ -621,8 +735,56 @@
   function pushProgress() {
     if (!profile || !classCode || typeof fbSaveProgress !== "function") return;
     checkScoreReset().then(function () {
-      fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid).catch(function() {});
+      // eerst samenvoegen met wat een ander apparaat intussen heeft opgeslagen
+      return typeof fbGetProgress === "function" ? fbGetProgress(myDocId()) : null;
+    }).then(function (remote) {
+      if (remote && mergeProgress(remote, false)) { syncBoard(); refreshChrome(); }
+      return fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid);
+    }).catch(function() {});
+  }
+
+  // Bij het openen van de app: voortgang van andere apparaten ophalen, en pincode laten kiezen als die er nog niet is.
+  function pullProgressOnStart() {
+    if (!profile || !classCode || typeof fbGetProgress !== "function") return;
+    checkScoreReset(true).then(function () { return fbGetProgress(myDocId()); }).then(function (remote) {
+      if (remote === undefined) return; // offline
+      if (remote && mergeProgress(remote, true)) {
+        syncBoard(); refreshChrome();
+        if (["intro", "map", "dashboard", "leaderboard"].indexOf(currentRoute.name) !== -1) go(currentRoute.name, currentRoute.param);
+        toast("🔄 Voortgang van je andere apparaat is bijgewerkt.");
+      }
+      if (!remote || !remote.pinHash) {
+        const p = remote ? Promise.resolve() : fbSaveProgress(profile.name, profile.avatar, progress, classCode, profile.uid);
+        p.then(toonPinKiezen).catch(function () {});
+      }
     });
+  }
+
+  // Venster: pincode kiezen (voor leerlingen die nog geen pincode hebben)
+  function toonPinKiezen() {
+    if (document.getElementById("pin-kiezen")) return;
+    const inp = h("input", { class: "text-input", type: "password", inputmode: "numeric", maxlength: "4", placeholder: "••••", autocomplete: "off", style: "max-width:140px;letter-spacing:.4em;text-align:center;margin:0 auto;display:block" });
+    const inp2 = h("input", { class: "text-input", type: "password", inputmode: "numeric", maxlength: "4", placeholder: "nog een keer", autocomplete: "off", style: "max-width:140px;letter-spacing:.2em;text-align:center;margin:8px auto 0;display:block" });
+    const fout = h("p", { class: "form-error", style: "text-align:center" });
+    const ok = h("button", { class: "btn btn-gold", disabled: "" }, "Opslaan 🔑");
+    [inp, inp2].forEach(function (i) { i.addEventListener("input", function () { i.value = i.value.replace(/\D/g, "").slice(0, 4); ok.disabled = !(isPin(inp.value) && isPin(inp2.value)); }); });
+    const overlay = h("div", { id: "pin-kiezen", style: "position:fixed;inset:0;background:rgba(20,12,30,.75);z-index:3000;display:flex;align-items:center;justify-content:center;padding:16px" },
+      h("div", { class: "parchment", style: "max-width:420px;width:100%;padding:24px;border-radius:16px;text-align:center" },
+        h("div", { style: "font-size:2rem" }, "🔑"),
+        h("h3", { style: "margin:6px 0" }, "Kies een pincode"),
+        h("p", { style: "margin:0 0 12px" }, "Met je naam en deze pincode van 4 cijfers kun je voortaan ook op een andere laptop verder werken. Onthoud hem goed!"),
+        inp, inp2, fout, h("div", { style: "margin-top:12px" }, ok)));
+    ok.addEventListener("click", function () {
+      if (inp.value !== inp2.value) { fout.textContent = "De twee pincodes zijn niet hetzelfde."; return; }
+      ok.disabled = true;
+      fbSetPin(myDocId(), pinHash(profile.uid, inp.value)).then(function () {
+        profile.hasPin = true; save(LS.profile, profile);
+        overlay.remove();
+        toast("🔑 Pincode opgeslagen!");
+      }).catch(function () { fout.textContent = "Opslaan mislukt. Heb je internet?"; ok.disabled = false; });
+    });
+    document.body.append(overlay);
+    setTimeout(function () { inp.focus(); }, 50);
   }
 
   // Debounced Firebase sync — zodat atelier-typing niet elke toetsaanslag synct
@@ -907,6 +1069,19 @@
         if (!atelierTekst && !heeftVoortgangData(leerling)) {
           detailSectie.append(h("p", { style: "color:var(--ink-soft);font-style:italic;font-size:.85rem" }, "Nog geen antwoorden ingevuld."));
         }
+
+        // Pincode resetten (leerling vergeten)
+        const pinInfo = h("p", { style: "font-size:.85rem;color:var(--ink-soft);margin:10px 0 4px" },
+          leerling.pinHash ? "🔑 Heeft een pincode." : "🔑 Nog geen pincode ingesteld.");
+        const pinBtn = h("button", { class: "btn btn-ghost small", style: "margin:0 8px 0 0" }, "🔑 Pincode resetten");
+        pinBtn.addEventListener("click", function() {
+          if (!confirm("Pincode van " + leerling.name + " resetten?\n\n" + leerling.name + " kan daarna inloggen met alleen zijn/haar naam en kiest dan een nieuwe pincode.")) return;
+          fbResetPin(leerling._id).then(function() {
+            toast("🔑 Pincode van " + leerling.name + " is gereset.");
+            pinInfo.textContent = "🔑 Pincode gereset — kiest een nieuwe bij de volgende keer inloggen.";
+          }).catch(function() { toast("Resetten mislukt."); });
+        });
+        if (leerling._id && typeof fbResetPin === "function") detailSectie.append(pinInfo, pinBtn);
 
         // Verwijder-knop (docent kan leerling resetten)
         const verwijderBtn = h("button", { class: "btn btn-ghost small", style: "color:#c0392b;border-color:#c0392b;margin-top:8px" }, "🗑 Verwijder uit overzicht");
@@ -4369,7 +4544,7 @@
     refreshChrome();
     updateAankondiging();
     go("intro");
-    checkScoreReset(true);
+    pullProgressOnStart();
   } else if (!classCode) {
     initKlascodeScherm();
   } else {

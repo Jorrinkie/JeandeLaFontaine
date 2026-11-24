@@ -232,7 +232,7 @@ async function fbSaveProgress(studentName, avatarStr, progress, classCode, uid) 
       badges: progress.badges || [],
       answers: safeAnswers,
       updated: firebase.firestore.FieldValue.serverTimestamp()
-    });
+    }, { merge: true }); // merge: pincode (pinHash) blijft staan
   } catch (e) { console.warn("fbSaveProgress fout:", e); }
 }
 
@@ -287,4 +287,40 @@ async function fbNameTaken(classCode, name, uid) {
     console.warn("fbNameTaken fout:", e);
     return false;
   }
+}
+
+/* ── Inloggen met naam + pincode ──────────────────────── */
+
+/** Alle leerlingen in een klas met deze naam (hoofdletters/spaties maken niet uit). null bij een fout. */
+async function fbFindStudents(classCode, name) {
+  try {
+    const want = (name || "").trim().toLowerCase();
+    const snap = await _db.collection("leerling_voortgang").where("classCode", "==", classCode).get();
+    return snap.docs.map(d => Object.assign({ _id: d.id }, d.data()))
+      .filter(x => (x.name || "").trim().toLowerCase() === want);
+  } catch (e) {
+    console.warn("fbFindStudents fout:", e);
+    return null;
+  }
+}
+
+/** Eén voortgangsdocument. null = bestaat niet, undefined = fout (bv. offline). */
+async function fbGetProgress(docId) {
+  try {
+    const doc = await _db.collection("leerling_voortgang").doc(docId).get();
+    return doc.exists ? doc.data() : null;
+  } catch (e) {
+    console.warn("fbGetProgress fout:", e);
+    return undefined;
+  }
+}
+
+/** Sla de (gehashte) pincode op bij een leerling. */
+async function fbSetPin(docId, hash) {
+  await _db.collection("leerling_voortgang").doc(docId).set({ pinHash: hash }, { merge: true });
+}
+
+/** Docent: pincode wissen. De leerling kan daarna inloggen met zijn naam en kiest een nieuwe pincode. */
+async function fbResetPin(docId) {
+  await _db.collection("leerling_voortgang").doc(docId).set({ pinHash: null }, { merge: true });
 }
