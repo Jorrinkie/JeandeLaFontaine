@@ -25,59 +25,65 @@ const _db = firebase.firestore();
  * @param {string} docentNaam  Naam van de docent
  * @param {string} klasNaam    Naam van de klas (bijv. "3HB")
  */
+/* Klassen worden opgeslagen als één document in de leaderboard-collectie
+   (die al open rechten heeft). Doc-id: __klassen__registry__ */
+const _KLASSEN_DOC = "klassenregistry";
+
+async function _leesKlassenDoc() {
+  try {
+    const doc = await _db.collection("leaderboard").doc(_KLASSEN_DOC).get();
+    return doc.exists ? (doc.data().klassen || {}) : {};
+  } catch (e) { return {}; }
+}
+
+async function _schrijfKlassenDoc(klassen) {
+  await _db.collection("leaderboard").doc(_KLASSEN_DOC).set({ klassen });
+}
+
 async function fbCreateClass(code, docentNaam, klasNaam) {
-  await _db.collection("klassen").doc(code).set({
+  const klassen = await _leesKlassenDoc();
+  klassen[code] = {
     code,
     docentNaam: docentNaam || "Docent",
     klasNaam: klasNaam || code,
-    created: firebase.firestore.FieldValue.serverTimestamp()
-  });
+    created: Date.now()
+  };
+  await _schrijfKlassenDoc(klassen);
 }
 
-/**
- * Valideer een klascode. Geeft klas-object terug of null als code niet bestaat.
- * @param {string} code
- * @returns {Promise<object|null>}
- */
 async function fbValidateClass(code) {
   try {
-    const doc = await _db.collection("klassen").doc(code.trim().toUpperCase()).get();
-    return doc.exists ? doc.data() : null;
+    const klassen = await _leesKlassenDoc();
+    return klassen[code.trim().toUpperCase()] || null;
   } catch (e) {
     console.warn("fbValidateClass fout:", e);
     return null;
   }
 }
 
-/**
- * Laad alle klassen (voor docent-dashboard).
- * @returns {Promise<Array>}
- */
 async function fbGetAllClasses() {
   try {
-    const snap = await _db.collection("klassen").orderBy("created", "desc").get();
-    return snap.docs.map(d => d.data());
+    const klassen = await _leesKlassenDoc();
+    return Object.values(klassen).sort((a, b) => (b.created || 0) - (a.created || 0));
   } catch (e) {
     console.warn("fbGetAllClasses fout:", e);
     return [];
   }
 }
 
-/**
- * Verwijder een klas én alle bijbehorende leerlingdata.
- * @param {string} code
- */
 async function fbDeleteClass(code) {
   try {
-    // Verwijder klas zelf
-    await _db.collection("klassen").doc(code).delete();
+    // Verwijder klas uit registry
+    const klassen = await _leesKlassenDoc();
+    delete klassen[code];
+    await _schrijfKlassenDoc(klassen);
     // Verwijder leerling-voortgang van deze klas
     const snap = await _db.collection("leerling_voortgang")
       .where("classCode", "==", code).get();
     const batch = _db.batch();
     snap.docs.forEach(d => batch.delete(d.ref));
     if (snap.docs.length) await batch.commit();
-    // Verwijder leaderboard van deze klas
+    // Verwijder leaderboard-scores van deze klas
     const lbSnap = await _db.collection("leaderboard")
       .where("classCode", "==", code).get();
     const batch2 = _db.batch();

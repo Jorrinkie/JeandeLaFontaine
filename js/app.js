@@ -5,6 +5,13 @@
 (function () {
   "use strict";
 
+  /* ---------------- URL reset-param ---------------- */
+  if (new URLSearchParams(window.location.search).get("reset") !== null) {
+    localStorage.clear();
+    window.location.href = window.location.pathname;
+    return;
+  }
+
   /* ---------------- storage ---------------- */
   const LS = { profile: "flf_profile", progress: "flf_progress", board: "flf_leaderboard", teacher: "flf_teacher_device", videos: "flf_videos", docs: "flf_docs", feedback: "flf_feedback", classCode: "flf_class_code" };
 
@@ -3984,19 +3991,28 @@
   // Docent-nav knop tonen indien ingelogd
   function refreshDocentNav() {
     const existing = document.getElementById("nav-docentbeheer");
-    if (isTeacher()) {
-      if (!existing) {
-        const btn = document.createElement("button");
-        btn.className = "nav-btn";
-        btn.id = "nav-docentbeheer";
-        btn.dataset.nav = "docentbeheer";
-        btn.textContent = "🛠️ Beheer";
-        btn.addEventListener("click", () => go("docentbeheer"));
-        const nav = document.querySelector(".topnav");
-        if (nav) nav.append(btn);
-      }
-    } else {
-      if (existing) existing.remove();
+    if (!existing) {
+      const btn = document.createElement("button");
+      btn.className = "nav-btn";
+      btn.id = "nav-docentbeheer";
+      btn.dataset.nav = "docentbeheer";
+      btn.textContent = "🛠️ Beheer";
+      btn.addEventListener("click", () => {
+        if (isTeacher()) {
+          go("docentbeheer");
+        } else {
+          const pin = window.prompt("Docentwachtwoord:");
+          if (pin === null) return;
+          if (pin.trim() === TEACHER_PIN) {
+            save(LS.teacher, "granted");
+            go("docentbeheer");
+          } else {
+            window.alert("❌ Verkeerd wachtwoord.");
+          }
+        }
+      });
+      const nav = document.querySelector(".topnav");
+      if (nav) nav.append(btn);
     }
   }
 
@@ -4020,6 +4036,9 @@
         <p id="kc-fout" style="color:#c0392b;min-height:20px;margin:0 0 12px;font-size:.9rem"></p>
         <button id="kc-btn" style="width:100%;padding:13px;background:var(--royal,#2c3e7a);color:#fff;border:none;border-radius:10px;font-size:1rem;font-weight:600;cursor:pointer">
           Verder →
+        </button>
+        <button id="kc-docent-link" style="margin-top:16px;width:100%;padding:11px;background:transparent;color:var(--royal,#2c3e7a);border:2px solid var(--royal,#2c3e7a);border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer">
+          🔑 Ik ben docent
         </button>
       </div>`;
 
@@ -4076,6 +4095,22 @@
     });
 
     input.focus();
+
+    scherm.querySelector("#kc-docent-link").addEventListener("click", () => {
+      const pin = window.prompt("Voer het docentwachtwoord in:");
+      if (pin === null) return;
+      if (pin.trim() === TEACHER_PIN) {
+        save(LS.teacher, "granted");
+        scherm.remove();
+        $("#screen-onboarding").classList.remove("active");
+        $("#app-shell").classList.remove("hidden");
+        showBanqueLauncher();
+        refreshDocentNav();
+        go("docentbeheer");
+      } else {
+        window.alert("❌ Verkeerd wachtwoord.");
+      }
+    });
   }
 
   if (profile && classCode) {
